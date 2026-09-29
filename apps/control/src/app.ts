@@ -302,6 +302,9 @@ export function createApp(
     config.PYTHON_PATH,
   );
   app.get("/datasets", async () => datasets.snapshot());
+  app.get("/datasets/:id/examples", async (req) =>
+    datasets.examples((req.params as { id: string }).id, req.query),
+  );
   app.post("/datasets", async (req) => datasets.start(req.body));
   app.post("/datasets/:id/rerun", async (req) =>
     datasets.rerun((req.params as { id: string }).id),
@@ -313,7 +316,13 @@ export function createApp(
     const { id, file } = req.params as { id: string; file: string };
     const path = datasets.artifact(id, file);
     reply.header("content-disposition", `attachment; filename="${id}-${file}"`);
-    reply.type(file.endsWith(".csv") ? "text/csv" : "application/json");
+    reply.type(
+      file.endsWith(".csv")
+        ? "text/csv"
+        : file.endsWith(".jsonl")
+          ? "application/x-ndjson"
+          : "application/json",
+    );
     return reply.send(createReadStream(path));
   });
   app.get("/progress", async (req) => {

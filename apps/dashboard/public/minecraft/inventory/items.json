@@ -1,0 +1,54 @@
+{
+  "minecraft:stick": {
+    "name": "Stick",
+    "icon": "/minecraft/inventory/stick.png"
+  },
+  "minecraft:raw_iron": {
+    "name": "Raw Iron",
+    "icon": "/minecraft/inventory/raw_iron.png"
+  },
+  "minecraft:iron_ingot": {
+    "name": "Iron Ingot",
+    "icon": "/minecraft/inventory/iron_ingot.png"
+  },
+  "minecraft:coal": {
+    "name": "Coal",
+    "icon": "/minecraft/inventory/coal.png"
+  },
+  "minecraft:charcoal": {
+    "name": "Charcoal",
+    "icon": "/minecraft/inventory/charcoal.png"
+  },
+  "minecraft:wooden_pickaxe": {
+    "name": "Wooden Pickaxe",
+    "icon": "/minecraft/inventory/wooden_pickaxe.png"
+  },
+  "minecraft:stone_pickaxe": {
+    "name": "Stone Pickaxe",
+    "icon": "/minecraft/inventory/stone_pickaxe.png"
+  },
+  "minecraft:iron_pickaxe": {
+    "name": "Iron Pickaxe",
+    "icon": "/minecraft/inventory/iron_pickaxe.png"
+  },
+  "minecraft:oak_log": {
+    "name": "Oak Log",
+    "icon": "/minecraft/inventory/oak_log.svg"
+  },
+  "minecraft:oak_planks": {
+    "name": "Oak Planks",
+    "icon": "/minecraft/inventory/oak_planks.svg"
+  },
+  "minecraft:cobblestone": {
+    "name": "Cobblestone",
+    "icon": "/minecraft/inventory/cobblestone.svg"
+  },
+  "minecraft:crafting_table": {
+    "name": "Crafting Table",
+    "icon": "/minecraft/inventory/crafting_table.svg"
+  },
+  "minecraft:furnace": {
+    "name": "Furnace",
+    "icon": "/minecraft/inventory/furnace.svg"
+  }
+}

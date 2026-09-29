@@ -106,16 +106,58 @@ test(
       job = state.json().jobs.find((item: { id: string }) => item.id === id);
     } while (job.status === "running" && Date.now() < deadline);
     assert.equal(job.status, "completed", job.error);
-    const download = `/datasets/${id}/artifacts/train.csv`;
+    const download = `/datasets/${id}/artifacts/train.jsonl`;
     assert.equal(
       (await app.inject({ method: "GET", url: download })).statusCode,
       401,
     );
     const csv = await app.inject({ method: "GET", url: download, headers });
     assert.equal(csv.statusCode, 200);
-    assert.match(String(csv.headers["content-type"]), /text\/csv/);
+    assert.match(String(csv.headers["content-type"]), /application\/x-ndjson/);
     assert.match(String(csv.headers["content-disposition"]), /attachment/);
-    assert.equal(csv.body.trim().split("\n").length, 9);
+    assert.equal(csv.body.trim().split("\n").length, 8);
+    const exampleUrl = `/datasets/${id}/examples?split=train&offset=2&limit=2`;
+    assert.equal(
+      (await app.inject({ method: "GET", url: exampleUrl })).statusCode,
+      401,
+    );
+    const examples = await app.inject({
+      method: "GET",
+      url: exampleUrl,
+      headers,
+    });
+    assert.equal(examples.statusCode, 200);
+    assert.equal(examples.json().total, 8);
+    assert.equal(examples.json().examples[0].index, 2);
+    assert.equal(examples.json().examples[0].data.schema_version, 2);
+    assert.deepEqual(
+      examples.json().examples.map((entry: { data: unknown }) => entry.data),
+      csv.body
+        .trim()
+        .split("\n")
+        .slice(2, 4)
+        .map((line) => JSON.parse(line)),
+    );
+    assert.equal(
+      (
+        await app.inject({
+          method: "GET",
+          url: `/datasets/${id}/examples?split=unknown`,
+          headers,
+        })
+      ).statusCode,
+      400,
+    );
+    assert.equal(
+      (
+        await app.inject({
+          method: "GET",
+          url: `/datasets/${id}/examples?offset=-1`,
+          headers,
+        })
+      ).statusCode,
+      400,
+    );
     assert.equal(
       (
         await app.inject({

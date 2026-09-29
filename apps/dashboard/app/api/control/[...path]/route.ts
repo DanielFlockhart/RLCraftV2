@@ -10,7 +10,7 @@ async function proxy(
   const route = path.join("/");
   const valid =
     req.method === "GET"
-      ? /^(datasets(?:\/[a-f0-9-]+\/artifacts\/(train\.csv|validation\.csv|test\.csv|ood_test\.csv|metadata\.json))?|snapshot|progress|backends|clients|worlds|inputs(?:\/catalog\.json)?|agent-presets|arena-presets|models|models\/stage\/(movement|wood_collection|block_collection|survival|pvp)|models\/run\/[a-f0-9-]+|runs\/[a-f0-9-]+(?:\/agents\/rl_[a-f0-9]{6}_\d{1,3}\/(inputs|feed)|\/artifacts\/(config\.json|metrics\.jsonl|episodes\.jsonl|checkpoint\.json|controls\.jsonl|models\.json|inputs\.jsonl))?)$/.test(
+      ? /^(datasets(?:\/[a-f0-9-]+\/(?:examples|artifacts\/(?:(?:train|validation|test|ood_test)\.(?:csv|jsonl)|metadata\.json)))?|snapshot|progress|backends|clients|worlds|inputs(?:\/catalog\.json)?|agent-presets|arena-presets|models|models\/stage\/(movement|wood_collection|block_collection|survival|pvp)|models\/run\/[a-f0-9-]+|runs\/[a-f0-9-]+(?:\/agents\/rl_[a-f0-9]{6}_\d{1,3}\/(inputs|feed)|\/artifacts\/(config\.json|metrics\.jsonl|episodes\.jsonl|checkpoint\.json|controls\.jsonl|models\.json|inputs\.jsonl))?)$/.test(
           route,
         )
       : /^(datasets|datasets\/[a-f0-9-]+\/(rerun|cancel)|archive\/sync|clients\/prepare|inputs\/prepare|runs|runs\/[a-f0-9-]+\/(pause|resume|cancel|rerun|playback|watch|agents\/rl_[a-f0-9]{6}_\d{1,3}\/capture)|(?:agent|arena)-presets|(?:agent|arena)-presets\/[a-f0-9-]+(?:\/delete)?|worlds|worlds\/[a-f0-9-]+\/(activate|reset)|server\/(start|stop|command|prepare))$/.test(
@@ -32,8 +32,16 @@ async function proxy(
   }
   try {
     const { origin, token } = dashboardControlConnection();
-    const query =
-      route === "progress" && req.nextUrl.searchParams.has("runId")
+    const exampleQuery = new URLSearchParams();
+    if (/^datasets\/[a-f0-9-]+\/examples$/.test(route)) {
+      for (const key of ["split", "offset", "limit"]) {
+        const value = req.nextUrl.searchParams.get(key);
+        if (value !== null) exampleQuery.set(key, value);
+      }
+    }
+    const query = exampleQuery.size
+      ? `?${exampleQuery}`
+      : route === "progress" && req.nextUrl.searchParams.has("runId")
         ? `?${new URLSearchParams({ runId: req.nextUrl.searchParams.get("runId")! })}`
         : route.startsWith("models/stage/") &&
             req.nextUrl.searchParams.get("fresh") === "1"

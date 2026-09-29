@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import type { DatasetSnapshot, DatasetJob } from "@rlcraft/core";
 
 export function Datasets({ online }: { online: boolean }) {
@@ -129,6 +130,7 @@ export function Datasets({ online }: { online: boolean }) {
                   .filter(
                     (job) =>
                       job.status === "completed" &&
+                      job.generatorVersion === generator?.version &&
                       job.generatorId === generatorId,
                   )
                   .map((job) => (
@@ -254,12 +256,26 @@ export function Datasets({ online }: { online: boolean }) {
                             Use parameters
                           </button>
                           {job.status === "completed" && (
-                            <button
-                              disabled={busy}
-                              onClick={() => configure(job, true)}
-                            >
-                              Expand
-                            </button>
+                            <>
+                              <Link
+                                className="run-link"
+                                href={`/datasets/${job.id}`}
+                              >
+                                Inspect examples
+                              </Link>
+                              <button
+                                disabled={
+                                  busy ||
+                                  job.generatorVersion !==
+                                    data.generators.find(
+                                      (item) => item.id === job.generatorId,
+                                    )?.version
+                                }
+                                onClick={() => configure(job, true)}
+                              >
+                                Expand
+                              </button>
+                            </>
                           )}
                         </>
                       )}
@@ -286,6 +302,11 @@ export function Datasets({ online }: { online: boolean }) {
             </p>
           )}
           <div className="dataset-actions">
+            {focus.status === "completed" && (
+              <Link className="run-link" href={`/datasets/${focus.id}`}>
+                Inspect examples →
+              </Link>
+            )}
             {focus.artifacts.map((file) => (
               <a
                 key={file}

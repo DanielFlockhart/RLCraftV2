@@ -557,6 +557,11 @@ export interface ModelSnapshot {
 }
 export type {
   DatasetParameter,
+  DatasetSplit,
+  InventoryStack,
+  GoalSelectionExample,
+  DatasetExamples,
+  DatasetCoverage,
   DatasetGenerator,
   DatasetJob,
   DatasetSnapshot,

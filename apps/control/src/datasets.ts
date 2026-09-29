@@ -10,12 +10,15 @@ import {
   writeFileSync,
   renameSync,
   lstatSync,
+  createReadStream,
 } from "node:fs";
 import { z } from "zod";
 import type {
   DatasetGenerator,
   DatasetJob,
   DatasetSnapshot,
+  DatasetExamples,
+  GoalSelectionExample,
 } from "@rlcraft/core";
 
 // Only trusted, repository-owned scripts are executable. Add future generators here.
@@ -23,16 +26,16 @@ export const datasetRegistry: (DatasetGenerator & { script: string })[] = [
   {
     id: "phase1a",
     name: "Phase 1A · Goal selection",
-    version: "1.0.0",
+    version: "2.2.0",
     description:
-      "Synthetic state-to-goal labels for wood through iron pickaxe progression. Includes validity masks, teacher probabilities and OOD inventory states.",
+      "Goal selection with a required edge-case matrix, family-balanced sampling, item slots, blocked-state labels and per-split coverage reports.",
     script: "scripts/datasets/phase1a.py",
     supportsExpansion: true,
     artifacts: [
-      "train.csv",
-      "validation.csv",
-      "test.csv",
-      "ood_test.csv",
+      "train.jsonl",
+      "validation.jsonl",
+      "test.jsonl",
+      "ood_test.jsonl",
       "metadata.json",
     ],
     parameters: [
@@ -83,9 +86,18 @@ export const datasetRegistry: (DatasetGenerator & { script: string })[] = [
       },
       {
         key: "boundaryFraction",
-        label: "Boundary sampling fraction",
+        label: "Boundary fraction within random samples",
         flag: "--boundary-fraction",
         default: 0.3,
+        min: 0,
+        max: 1,
+        integer: false,
+      },
+      {
+        key: "edgeFraction",
+        label: "Additional edge-case sampling fraction",
+        flag: "--edge-fraction",
+        default: 0.6,
         min: 0,
         max: 1,
         integer: false,
@@ -119,6 +131,13 @@ export const datasetRequestSchema = z
   })
   .strict();
 const idSchema = z.uuid();
+export const datasetExamplesQuery = z
+  .object({
+    split: z.enum(["train", "validation", "test", "ood_test"]).default("train"),
+    offset: z.coerce.number().int().min(0).max(100000000).default(0),
+    limit: z.coerce.number().int().min(1).max(50).default(20),
+  })
+  .strict();
 
 export class DatasetManager {
   private jobs = new Map<string, DatasetJob>();
@@ -344,7 +363,13 @@ export class DatasetManager {
     if (
       job.status !== "completed" ||
       !job.artifacts.includes(file) ||
-      !this.generator(job.generatorId).artifacts.includes(file)
+      !(
+        this.generator(job.generatorId).artifacts.includes(file) ||
+        (job.generatorId === "phase1a" &&
+          ["train.csv", "validation.csv", "test.csv", "ood_test.csv"].includes(
+            file,
+          ))
+      )
     )
       throw new Error("Dataset artifact is unavailable");
     const path = join(this.directory, id, "output", file);
@@ -352,6 +377,67 @@ export class DatasetManager {
     if (!info.isFile() || info.isSymbolicLink())
       throw new Error("Invalid dataset artifact");
     return path;
+  }
+  async examples(id: string, query: unknown): Promise<DatasetExamples> {
+    const { split, offset, limit } = datasetExamplesQuery.parse(query);
+    const job = this.get(id);
+    if (
+      job.generatorId !== "phase1a" ||
+      !job.artifacts.includes(`${split}.jsonl`)
+    )
+      throw new Error(
+        "This dataset uses the older aggregate format. Generate a new Phase 1A dataset to inspect item stacks and slots.",
+      );
+    const path = this.artifact(id, `${split}.jsonl`);
+    const indexPath = join(this.directory, id, "output", `${split}.index.json`);
+    const info = lstatSync(indexPath);
+    if (!info.isFile() || info.isSymbolicLink())
+      throw new Error("Invalid dataset example index");
+    const index = z
+      .object({
+        stride: z.number().int().min(1).max(4096),
+        rows: z.number().int().nonnegative(),
+        offsets: z.array(z.number().int().nonnegative()),
+      })
+      .parse(JSON.parse(readFileSync(indexPath, "utf8")));
+    const { logs: _logs, ...descriptor } = job;
+    const result: DatasetExamples = {
+      job: descriptor,
+      split,
+      offset,
+      total: index.rows,
+      examples: [],
+    };
+    const metadata = JSON.parse(
+      readFileSync(this.artifact(id, "metadata.json"), "utf8"),
+    );
+    if (metadata.coverage?.[split]) result.coverage = metadata.coverage[split];
+    if (offset >= index.rows) return result;
+    const block = Math.floor(offset / index.stride);
+    if (index.offsets[block] === undefined)
+      throw new Error("Dataset example index is incomplete");
+    const stream = createReadStream(path, {
+      start: index.offsets[block],
+      encoding: "utf8",
+    });
+    const lines = createInterface({ input: stream, crlfDelay: Infinity });
+    let row = block * index.stride;
+    try {
+      for await (const line of lines) {
+        if (row >= offset) {
+          const data = JSON.parse(line) as GoalSelectionExample;
+          if (data.schema_version !== 2)
+            throw new Error("Unsupported inventory example schema");
+          result.examples.push({ index: row, data });
+          if (result.examples.length >= limit) break;
+        }
+        row++;
+      }
+    } finally {
+      lines.close();
+      stream.destroy();
+    }
+    return result;
   }
   async close() {
     this.closing = true;
