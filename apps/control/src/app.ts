@@ -21,6 +21,7 @@ import { Scheduler } from "./scheduler.js";
 import { MinecraftServer } from "./server.js";
 import { config, token, root } from "./config.js";
 import { DatasetManager } from "./datasets.js";
+import { GoalModelManager } from "./goal-models.js";
 import {
   WorldManager,
   worldCreateSchema,
@@ -302,6 +303,38 @@ export function createApp(
     config.PYTHON_PATH,
   );
   app.get("/datasets", async () => datasets.snapshot());
+  const goalModels = new GoalModelManager(
+    resolve(config.artifactDir, "goal-models"),
+    root,
+    config.PYTHON_PATH,
+    datasets,
+  );
+  app.get("/goal-models", async () => goalModels.snapshot());
+  app.post("/goal-models/:id/reload", async (req) =>
+    goalModels.reload((req.params as { id: string }).id),
+  );
+  app.post("/goal-models", async (req) => goalModels.start(req.body));
+  app.post("/goal-models/:id/cancel", async (req) =>
+    goalModels.cancel((req.params as { id: string }).id),
+  );
+  app.post("/goal-models/:id/rerun", async (req) =>
+    goalModels.rerun((req.params as { id: string }).id),
+  );
+  app.post("/goal-models/:id/predict", async (req) =>
+    goalModels.predict((req.params as { id: string }).id, req.body),
+  );
+  app.get("/goal-models/:id/artifacts/:file", async (req, reply) => {
+    const { id, file } = req.params as { id: string; file: string };
+    reply.header("content-disposition", `attachment; filename="${id}-${file}"`);
+    reply.type(
+      file.endsWith(".json")
+        ? "application/json"
+        : file.endsWith(".jsonl")
+          ? "application/x-ndjson"
+          : "application/octet-stream",
+    );
+    return reply.send(createReadStream(goalModels.artifact(id, file)));
+  });
   app.get("/datasets/:id/examples", async (req) =>
     datasets.examples((req.params as { id: string }).id, req.query),
   );
@@ -724,6 +757,7 @@ export function createApp(
     await inputPreparation.close();
     await fabricPreparation.close();
     await datasets.close();
+    await goalModels.close();
     await server.stop();
     await archive.close();
     store.close();

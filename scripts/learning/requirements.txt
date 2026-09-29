@@ -1,0 +1,4 @@
+# CPU: pip install -r scripts/learning/requirements.txt --index-url https://download.pytorch.org/whl/cpu
+# For CUDA, install the matching official PyTorch wheel instead.
+torch==2.14.0
+numpy>=2.1,<3

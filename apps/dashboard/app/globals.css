@@ -2625,3 +2625,44 @@ footer span:first-child {
   align-items: center;
   gap: 10px;
 }
+.goal-loss-chart {
+  height: 260px;
+  min-width: 0;
+}
+.stage-detail-heading {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+}
+.stage-detail-heading h2 {
+  margin: 0;
+  flex: 1;
+}
+.goal-breakdowns,
+.goal-prediction-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+}
+.goal-breakdowns > div,
+.goal-prediction-grid > div {
+  min-width: 0;
+  overflow: auto;
+}
+.goal-models-page details {
+  margin: 12px 0;
+}
+.goal-models-page summary {
+  cursor: pointer;
+}
+.goal-prediction-grid {
+  margin-top: 24px;
+}
+@media (max-width: 900px) {
+  .goal-breakdowns,
+  .goal-prediction-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

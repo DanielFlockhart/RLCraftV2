@@ -8,14 +8,23 @@ async function proxy(
 ) {
   const { path } = await params;
   const route = path.join("/");
-  const valid =
+  const goalRoute =
     req.method === "GET"
+      ? /^goal-models(?:\/[a-f0-9-]+\/artifacts\/((?:checkpoint|training-state)\.pt|config\.json|evaluation\.json|history\.jsonl|teacher\.py|dataset\.json))?$/.test(
+          route,
+        )
+      : /^goal-models(?:\/[a-f0-9-]+\/(cancel|rerun|predict|reload))?$/.test(
+          route,
+        );
+  const valid =
+    goalRoute ||
+    (req.method === "GET"
       ? /^(datasets(?:\/[a-f0-9-]+\/(?:examples|artifacts\/(?:(?:train|validation|test|ood_test)\.(?:csv|jsonl)|metadata\.json)))?|snapshot|progress|backends|clients|worlds|inputs(?:\/catalog\.json)?|agent-presets|arena-presets|models|models\/stage\/(movement|wood_collection|block_collection|survival|pvp)|models\/run\/[a-f0-9-]+|runs\/[a-f0-9-]+(?:\/agents\/rl_[a-f0-9]{6}_\d{1,3}\/(inputs|feed)|\/artifacts\/(config\.json|metrics\.jsonl|episodes\.jsonl|checkpoint\.json|controls\.jsonl|models\.json|inputs\.jsonl))?)$/.test(
           route,
         )
       : /^(datasets|datasets\/[a-f0-9-]+\/(rerun|cancel)|archive\/sync|clients\/prepare|inputs\/prepare|runs|runs\/[a-f0-9-]+\/(pause|resume|cancel|rerun|playback|watch|agents\/rl_[a-f0-9]{6}_\d{1,3}\/capture)|(?:agent|arena)-presets|(?:agent|arena)-presets\/[a-f0-9-]+(?:\/delete)?|worlds|worlds\/[a-f0-9-]+\/(activate|reset)|server\/(start|stop|command|prepare))$/.test(
           route,
-        );
+        ));
   if (!valid)
     return Response.json({ error: "Unknown control route" }, { status: 404 });
   if (req.method === "POST") {

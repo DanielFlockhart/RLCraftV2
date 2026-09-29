@@ -52,6 +52,22 @@ const base = {
   tickMs: 20,
   seed: 42,
 };
+test("goal model API authenticates and validates training requests", async () => {
+  assert.equal((await app.inject({ url: "/goal-models" })).statusCode, 401);
+  const response = await app.inject({ url: "/goal-models", headers });
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.json().defaults.width, 128);
+  assert.equal(response.json().jobs.length, 0);
+  assert.equal(
+    (await post("/goal-models", { datasetId: "../../outside" })).statusCode,
+    400,
+  );
+  assert.equal(
+    (await post("/goal-models/not-a-model/predict", { example: {} }))
+      .statusCode,
+    400,
+  );
+});
 test("dataset API authenticates and exposes only registered generators", async () => {
   assert.equal(
     (await app.inject({ method: "GET", url: "/datasets" })).statusCode,

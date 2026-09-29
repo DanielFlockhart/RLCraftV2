@@ -142,6 +142,11 @@ The runner supplies a run seed and deterministic policy reset seeds. World rando
 
 Use **Datasets** in the dashboard to run the Phase 1A synthetic goal-selection generator with configurable split sizes, seed and sampling settings. Jobs support progress/logs, cancellation, downloads, reproducible reruns and expansion into new versions. Python 3.10+ must be installed on the control host; set `PYTHON_PATH` if needed. See [dataset generators](docs/datasets.md) for CLI usage, output details and registration of future scripts.
 
+Open **Training stages / Phase 1A · Goal prediction** to train the Phase 1A supervised MLP, inspect evaluation metrics,
+download checkpoints, and compare predictions with dataset examples. See
+[Phase 1A training](docs/phase1a-training.md) for Python dependencies and the reusable
+prediction interface.
+
 ## Layout
 
 ```text

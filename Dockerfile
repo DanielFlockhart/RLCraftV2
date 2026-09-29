@@ -7,8 +7,11 @@ ENV NODE_ENV=production
 
 FROM dependencies AS control
 # Paper 1.18.1 requires Java 17. Compiler tools install the viewer plugin.
-RUN apt-get update && apt-get install -y --no-install-recommends openjdk-17-jdk-headless python3 \
+RUN apt-get update && apt-get install -y --no-install-recommends openjdk-17-jdk-headless python3 python3-venv \
     && rm -rf /var/lib/apt/lists/*
+RUN python3 -m venv /opt/goal-training \
+    && /opt/goal-training/bin/python -m pip install --no-cache-dir -r scripts/learning/requirements.txt --index-url https://download.pytorch.org/whl/cpu
+ENV PYTHON_PATH=/opt/goal-training/bin/python
 ENV CONTROL_HOST=0.0.0.0 DATA_DIR=/data ARTIFACT_DIR=/artifacts SERVER_DIR=/server JAVA_PATH=java
 EXPOSE 4100 25565
 CMD ["node", "--import", "tsx", "apps/control/src/index.ts"]

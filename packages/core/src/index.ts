@@ -566,3 +566,12 @@ export type {
   DatasetJob,
   DatasetSnapshot,
 } from "./datasets.js";
+export type {
+  GoalTrainingParameters,
+  GoalEpochMetric,
+  GoalSplitEvaluation,
+  GoalEvaluation,
+  GoalModelJob,
+  GoalModelSnapshot,
+  GoalPrediction,
+} from "./goal-models.js";

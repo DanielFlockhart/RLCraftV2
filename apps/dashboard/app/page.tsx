@@ -30,20 +30,13 @@ import { TrainingRulesEditor } from "../components/training-rules";
 import { Architecture } from "../components/architecture";
 import { Progress } from "../components/progress";
 import { Datasets } from "../components/datasets";
+import { GoalModels } from "../components/goal-models";
 import { InputEditor, LiveInputs } from "../components/inputs";
 import { BackendSelector } from "../components/backends";
 import { FabricSettings } from "../components/fabric";
 import { defaultInputs } from "@rlcraft/core";
-import { MinecraftIcon, stageIcons } from "../components/minecraft-icon";
-import type {
-  Snapshot,
-  RunSpec,
-  Run,
-  StageId,
-  LogEntry,
-  AgentSetup,
-  ArenaSpec,
-} from "@rlcraft/core";
+import { MinecraftIcon } from "../components/minecraft-icon";
+import type { Snapshot, RunSpec, Run, StageId, LogEntry } from "@rlcraft/core";
 type View =
   | "overview"
   | "training"
@@ -64,13 +57,20 @@ export default function Dashboard() {
   const [busy, setBusy] = useState(false);
   const [modal, setModal] = useState(false);
   const [selected, setSelected] = useState<string>("");
+  const [trainingStage, setTrainingStage] = useState<"phase1a">();
+  const phaseGoalStage = view === "training" && trainingStage === "phase1a";
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("view") === "agents") setView("agents");
     if (params.get("view") === "datasets") setView("datasets");
-    if (params.get("view") === "training") {
+    if (params.get("view") === "goal-models") {
       setView("training");
+      setTrainingStage("phase1a");
+    }
+    if (params.get("view") === "training") {
+      setView(params.get("run") ? "overview" : "training");
       setSelected(params.get("run") ?? "");
+      if (params.get("stage") === "phase1a") setTrainingStage("phase1a");
     }
   }, []);
   const [detail, setDetail] = useState<{
@@ -82,8 +82,6 @@ export default function Dashboard() {
   const [query, setQuery] = useState("");
   const [level, setLevel] = useState("all");
   const [command, setCommand] = useState("");
-  const [presetSetup, setPresetSetup] = useState<AgentSetup>();
-  const [presetArena, setPresetArena] = useState<ArenaSpec>();
   const [sourceJar, setSourceJar] = useState("");
   const [spec, setSpec] = useState<RunSpec>({
     stage: "movement",
@@ -189,6 +187,7 @@ export default function Dashboard() {
     setModal(true);
   }
   function runTable() {
+    const tableRuns = runs;
     return (
       <div className="table-wrap">
         <table>
@@ -203,7 +202,7 @@ export default function Dashboard() {
             </tr>
           </thead>
           <tbody>
-            {runs.map((run) => (
+            {tableRuns.map((run) => (
               <tr
                 key={run.id}
                 className={selected === run.id ? "selected" : ""}
@@ -283,7 +282,7 @@ export default function Dashboard() {
             ))}
           </tbody>
         </table>
-        {!runs.length && (
+        {!tableRuns.length && (
           <div className="empty">
             <FlaskConical size={28} />
             <h3>Your first experiment starts here</h3>
@@ -360,6 +359,11 @@ export default function Dashboard() {
               className={view === item.id ? "nav-active" : ""}
               onClick={() => {
                 setView(item.id);
+                if (item.id === "training") {
+                  setTrainingStage(undefined);
+                  setSelected("");
+                  window.history.replaceState(null, "", "/?view=training");
+                }
                 setQuery("");
               }}
             >
@@ -455,13 +459,15 @@ export default function Dashboard() {
                                 : "Persistent, structured logs from the control service, workers, and server."}
               </p>
             </div>
-            <button
-              className="primary"
-              disabled={!online || busy}
-              onClick={() => newRun()}
-            >
-              <Plus size={16} /> New training run
-            </button>
+            {view !== "training" && (
+              <button
+                className="primary"
+                disabled={!online || busy}
+                onClick={() => newRun()}
+              >
+                <Plus size={16} /> New training run
+              </button>
+            )}
           </div>
           {!online && (
             <div className="notice warn">
@@ -477,14 +483,21 @@ export default function Dashboard() {
               </button>
             </div>
           )}
-          <div className="notice">
-            <FlaskConical size={16} />
-            <span>
-              Infrastructure is ready. Policies and trainers are placeholders;
-              simulator runs verify plumbing and do not train AI.
-            </span>
-            <span className="notice-tag">AI EXTENSION POINTS</span>
-          </div>
+          {view !== "training" && (
+            <div className="notice">
+              <FlaskConical size={16} />
+              <span>
+                Live agent policies and skill trainers are placeholders;
+                simulator runs verify plumbing. Train supervised Phase 1A models
+                in{" "}
+                <Link href="/?view=training&stage=phase1a">
+                  Training stages / Phase 1A
+                </Link>
+                .
+              </span>
+              <span className="notice-tag">AI EXTENSION POINTS</span>
+            </div>
+          )}
           {(view === "overview" || view === "agents") && (
             <div className="stats">
               {[
@@ -620,237 +633,217 @@ export default function Dashboard() {
           )}
           {view === "training" && (
             <>
-              <div className="stage-grid">
-                {data?.stages.map((stage, i) => (
-                  <section className="stage-card" key={stage.id}>
+              {trainingStage && (
+                <div className="stage-detail-heading">
+                  <button
+                    onClick={() => {
+                      setTrainingStage(undefined);
+                      setSelected("");
+                      window.history.replaceState(null, "", "/?view=training");
+                    }}
+                  >
+                    Back to training stages
+                  </button>
+                  <h2>Phase 1A · Goal prediction</h2>
+                </div>
+              )}
+              {!trainingStage && (
+                <div className="stage-grid">
+                  <section className="stage-card">
                     <div className="stage-top">
-                      <span className="stage-number">0{i + 1}</span>
-                      <Badge status="placeholder" />
+                      <span className="stage-number">1A</span>
+                      <Badge status="ready" />
                     </div>
                     <h3 className="minecraft-heading">
-                      <MinecraftIcon name={stageIcons[stage.id]} size={30} />
-                      {stage.name}
+                      <MinecraftIcon name="book" size={30} />
+                      Phase 1A · Goal prediction
                     </h3>
-                    <p>{stage.description}</p>
-                    <small>{stage.readiness}</small>
+                    <p>
+                      Learn progression goals from inventory and player/world
+                      state.
+                    </p>
+                    <small>
+                      Supervised training · checkpoints · fine-tuning · loss
+                      graphs
+                    </small>
                     <button
-                      disabled={!online || busy}
-                      onClick={() => newRun(stage.id)}
+                      onClick={() => {
+                        setTrainingStage("phase1a");
+                        setSelected("");
+                        window.history.replaceState(
+                          null,
+                          "",
+                          "/?view=training&stage=phase1a",
+                        );
+                      }}
                     >
-                      Configure run <ArrowUpRight size={14} />
+                      Open stage <ArrowUpRight size={14} />
                     </button>
                   </section>
-                ))}
-              </div>
-              <div className="section-heading">
-                <h2>Run history</h2>
-                <span className="muted">Newest first</span>
-              </div>
-              <section className="panel">{runTable()}</section>
-              <section className="panel world-panel">
-                <div className="panel-heading">
-                  <div>
-                    <h3>Agent setup presets</h3>
-                    <p>
-                      Build reusable starting kits and agent state for different
-                      experiments.
-                    </p>
-                  </div>
                 </div>
-                <AgentSetupEditor
-                  value={presetSetup}
-                  onChange={setPresetSetup}
-                  act={act}
-                  online={online}
-                  idPrefix="preset-setup"
-                />
-              </section>
-              <section className="panel world-panel">
-                <div className="panel-heading">
-                  <div>
-                    <h3>Training structure blueprints</h3>
-                    <p>
-                      Design cages, resource rooms and shared arenas with
-                      stocked containers and mobs.
-                    </p>
-                  </div>
-                </div>
-                <ArenaEditor
-                  value={presetArena}
-                  onChange={setPresetArena}
-                  act={act}
-                  online={online}
-                  idPrefix="preset-arena"
-                  placement={false}
-                />
-              </section>
+              )}
+              {phaseGoalStage && <GoalModels online={online} />}
             </>
           )}
-          {selected &&
-            (view === "training" || view === "overview") &&
-            focus && (
-              <section className="panel detail">
-                <div className="panel-heading">
-                  <div>
-                    <h3>
-                      {focus.spec.stage.replaceAll("_", " ")}{" "}
-                      <span className="mono">{focus.id.slice(0, 8)}</span>
-                    </h3>
-                    <p>
-                      {focus.spec.component} · seed {focus.spec.seed} ·{" "}
-                      {focus.spec.tickMs}ms cadence ·{" "}
-                      <Badge status={focus.status} />
-                    </p>
-                  </div>
-                  <button
-                    aria-label="Close run details"
-                    onClick={() => setSelected("")}
-                  >
-                    <X size={18} />
-                  </button>
-                </div>
-                {focus.error && (
-                  <div className="notice error">{focus.error}</div>
-                )}
-                <PlaybackControls
-                  key={focus.id}
-                  run={focus}
-                  act={async (path, body) => {
-                    const result = await act(path, body);
-                    if (result?.id === focus.id)
-                      setDetail((previous) =>
-                        previous ? { ...previous, run: result } : previous,
-                      );
-                    return result;
-                  }}
-                  busy={busy}
-                  online={online}
-                />
-                {focus.spec.mode === "minecraft" &&
-                  active.includes(focus.status) && (
-                    <div className="notice">
-                      <div>
-                        Join Minecraft as ChilledVibe, then watch an agent.
-                        Agents remain idle until you implement their policy.
-                      </div>
-                      <div className="agent-watch-list">
-                        {(data?.agents ?? [])
-                          .filter((agent) => agent.runId === focus.id)
-                          .map((agent) => (
-                            <button
-                              key={agent.id}
-                              className="run-link"
-                              disabled={
-                                busy ||
-                                !online ||
-                                !["active", "paused"].includes(agent.status)
-                              }
-                              onClick={() =>
-                                void act(`runs/${focus.id}/watch`, {
-                                  username: agent.username,
-                                })
-                              }
-                            >
-                              Watch {agent.username} · {agent.status}
-                            </button>
-                          ))}
-                      </div>
-                    </div>
-                  )}
-                {focus.world && (
-                  <div className="notice">
-                    World: <code>{focus.world.levelName}</code> ·{" "}
-                    {focus.world.settings.type} · seed{" "}
-                    {focus.world.settings.seed || "unrecorded"}
-                  </div>
-                )}
-                {focus.spec.rules && (
-                  <div className="notice">
-                    Rules: inventory on death{" "}
-                    {focus.spec.rules.keepInventory ? "kept" : "dropped"} ·
-                    hunger loss {focus.spec.rules.noHungerLoss ? "off" : "on"} ·
-                    creeper block damage{" "}
-                    {focus.spec.rules.creeperBlockDamage ? "world" : "off"} ·
-                    difficulty {focus.spec.rules.difficulty}. Full rules are
-                    recorded in config.json.
-                  </div>
-                )}
-                {focus.spec.setup && (
-                  <div className="notice">
-                    Starting setup: {focus.spec.setup.items.length} configured
-                    slots ·{" "}
-                    {focus.spec.setup.applyEachEpisode
-                      ? "each episode"
-                      : "once per run"}{" "}
-                    ·{" "}
-                    {focus.spec.setup.items
-                      .map(
-                        (item) =>
-                          `${item.item.replace("minecraft:", "")} ×${item.count}`,
-                      )
-                      .join(", ") || "empty inventory"}
-                  </div>
-                )}
-                {focus.spec.arena && (
-                  <p className="world-help">
-                    Training arena: {focus.spec.arena.blueprint.width} ×{" "}
-                    {focus.spec.arena.blueprint.depth} ×{" "}
-                    {focus.spec.arena.blueprint.height} interior ·{" "}
-                    {focus.spec.arena.layout === "shared"
-                      ? "shared"
-                      : "one cell per agent"}{" "}
-                    ·{" "}
-                    {focus.spec.arena.resetEachEpisode
-                      ? "rebuild each episode"
-                      : "build once"}{" "}
-                    · origin {focus.spec.arena.origin.x},{" "}
-                    {focus.spec.arena.origin.y}, {focus.spec.arena.origin.z}.
-                    Full blueprint is saved in config.json.
+          {selected && view === "overview" && focus && (
+            <section className="panel detail">
+              <div className="panel-heading">
+                <div>
+                  <h3>
+                    {focus.spec.stage.replaceAll("_", " ")}{" "}
+                    <span className="mono">{focus.id.slice(0, 8)}</span>
+                  </h3>
+                  <p>
+                    {focus.spec.component} · seed {focus.spec.seed} ·{" "}
+                    {focus.spec.tickMs}ms cadence ·{" "}
+                    <Badge status={focus.status} />
                   </p>
+                </div>
+                <button
+                  aria-label="Close run details"
+                  onClick={() => setSelected("")}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+              {focus.error && <div className="notice error">{focus.error}</div>}
+              <PlaybackControls
+                key={focus.id}
+                run={focus}
+                act={async (path, body) => {
+                  const result = await act(path, body);
+                  if (result?.id === focus.id)
+                    setDetail((previous) =>
+                      previous ? { ...previous, run: result } : previous,
+                    );
+                  return result;
+                }}
+                busy={busy}
+                online={online}
+              />
+              {focus.spec.mode === "minecraft" &&
+                active.includes(focus.status) && (
+                  <div className="notice">
+                    <div>
+                      Join Minecraft as ChilledVibe, then watch an agent. Agents
+                      remain idle until you implement their policy.
+                    </div>
+                    <div className="agent-watch-list">
+                      {(data?.agents ?? [])
+                        .filter((agent) => agent.runId === focus.id)
+                        .map((agent) => (
+                          <button
+                            key={agent.id}
+                            className="run-link"
+                            disabled={
+                              busy ||
+                              !online ||
+                              !["active", "paused"].includes(agent.status)
+                            }
+                            onClick={() =>
+                              void act(`runs/${focus.id}/watch`, {
+                                username: agent.username,
+                              })
+                            }
+                          >
+                            Watch {agent.username} · {agent.status}
+                          </button>
+                        ))}
+                    </div>
+                  </div>
                 )}
-                <div className="chart-grid">
-                  <div>
-                    <h3>Mean cumulative reward</h3>
-                    <Chart
-                      data={metrics as unknown as Array<Record<string, number>>}
-                      field="reward"
-                      label="Reward"
-                    />
-                  </div>
-                  <div>
-                    <h3>Worker memory (MB)</h3>
-                    <Chart
-                      data={metrics as unknown as Array<Record<string, number>>}
-                      field="workerMemoryMb"
-                      color="#e8b875"
-                      label="Worker memory MB"
-                    />
-                  </div>
+              {focus.world && (
+                <div className="notice">
+                  World: <code>{focus.world.levelName}</code> ·{" "}
+                  {focus.world.settings.type} · seed{" "}
+                  {focus.world.settings.seed || "unrecorded"}
                 </div>
-                <div className="artifacts">
-                  {[
-                    "config.json",
-                    "metrics.jsonl",
-                    "episodes.jsonl",
-                    ...(focus.status === "completed"
-                      ? ["checkpoint.json"]
-                      : []),
-                  ].map((name) => (
-                    <a
-                      key={name}
-                      href={`/api/control/runs/${focus.id}/artifacts/${name}`}
-                    >
-                      <Download size={14} />
-                      {name}
-                    </a>
-                  ))}
+              )}
+              {focus.spec.rules && (
+                <div className="notice">
+                  Rules: inventory on death{" "}
+                  {focus.spec.rules.keepInventory ? "kept" : "dropped"} · hunger
+                  loss {focus.spec.rules.noHungerLoss ? "off" : "on"} · creeper
+                  block damage{" "}
+                  {focus.spec.rules.creeperBlockDamage ? "world" : "off"} ·
+                  difficulty {focus.spec.rules.difficulty}. Full rules are
+                  recorded in config.json.
                 </div>
-                <p className="muted">
-                  Checkpoints contain metadata until you implement a trainer.
-                  Metrics measure infrastructure performance.
+              )}
+              {focus.spec.setup && (
+                <div className="notice">
+                  Starting setup: {focus.spec.setup.items.length} configured
+                  slots ·{" "}
+                  {focus.spec.setup.applyEachEpisode
+                    ? "each episode"
+                    : "once per run"}{" "}
+                  ·{" "}
+                  {focus.spec.setup.items
+                    .map(
+                      (item) =>
+                        `${item.item.replace("minecraft:", "")} ×${item.count}`,
+                    )
+                    .join(", ") || "empty inventory"}
+                </div>
+              )}
+              {focus.spec.arena && (
+                <p className="world-help">
+                  Training arena: {focus.spec.arena.blueprint.width} ×{" "}
+                  {focus.spec.arena.blueprint.depth} ×{" "}
+                  {focus.spec.arena.blueprint.height} interior ·{" "}
+                  {focus.spec.arena.layout === "shared"
+                    ? "shared"
+                    : "one cell per agent"}{" "}
+                  ·{" "}
+                  {focus.spec.arena.resetEachEpisode
+                    ? "rebuild each episode"
+                    : "build once"}{" "}
+                  · origin {focus.spec.arena.origin.x},{" "}
+                  {focus.spec.arena.origin.y}, {focus.spec.arena.origin.z}. Full
+                  blueprint is saved in config.json.
                 </p>
-              </section>
-            )}
+              )}
+              <div className="chart-grid">
+                <div>
+                  <h3>Mean cumulative reward</h3>
+                  <Chart
+                    data={metrics as unknown as Array<Record<string, number>>}
+                    field="reward"
+                    label="Reward"
+                  />
+                </div>
+                <div>
+                  <h3>Worker memory (MB)</h3>
+                  <Chart
+                    data={metrics as unknown as Array<Record<string, number>>}
+                    field="workerMemoryMb"
+                    color="#e8b875"
+                    label="Worker memory MB"
+                  />
+                </div>
+              </div>
+              <div className="artifacts">
+                {[
+                  "config.json",
+                  "metrics.jsonl",
+                  "episodes.jsonl",
+                  ...(focus.status === "completed" ? ["checkpoint.json"] : []),
+                ].map((name) => (
+                  <a
+                    key={name}
+                    href={`/api/control/runs/${focus.id}/artifacts/${name}`}
+                  >
+                    <Download size={14} />
+                    {name}
+                  </a>
+                ))}
+              </div>
+              <p className="muted">
+                Checkpoints contain metadata until you implement a trainer.
+                Metrics measure infrastructure performance.
+              </p>
+            </section>
+          )}
           {view === "agents" && (
             <section className="panel">
               <div className="panel-heading">
@@ -909,7 +902,7 @@ export default function Dashboard() {
                             className="run-link"
                             onClick={() => {
                               setSelected(a.runId);
-                              setView("training");
+                              setView("overview");
                             }}
                           >
                             {a.runId.slice(0, 8)} <ArrowUpRight size={12} />
@@ -1242,7 +1235,7 @@ export default function Dashboard() {
                 if (result) {
                   setModal(false);
                   setSelected(result.id);
-                  setView("training");
+                  setView("overview");
                 }
               }}
             >
