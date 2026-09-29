@@ -1,0 +1,13 @@
+services:
+  control:
+    environment:
+      ARCHIVE_PROVIDER: firebase
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:?Set FIREBASE_PROJECT_ID}
+      FIREBASE_STORAGE_BUCKET: ${FIREBASE_STORAGE_BUCKET:?Set FIREBASE_STORAGE_BUCKET}
+      FIREBASE_ARCHIVE_PREFIX: ${FIREBASE_ARCHIVE_PREFIX:-rlcraftRuntimes}
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/firebase_service_account
+    secrets:
+      - firebase_service_account
+secrets:
+  firebase_service_account:
+    file: ${GOOGLE_APPLICATION_CREDENTIALS:?Set an absolute path to the private service-account JSON}

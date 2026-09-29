@@ -1,0 +1,12 @@
+{
+  "indexes": [],
+  "fieldOverrides": [
+    { "collectionGroup": "logBatches", "fieldPath": "records", "indexes": [] },
+    {
+      "collectionGroup": "metricBatches",
+      "fieldPath": "records",
+      "indexes": []
+    },
+    { "collectionGroup": "hostBatches", "fieldPath": "records", "indexes": [] }
+  ]
+}

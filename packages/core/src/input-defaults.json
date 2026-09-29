@@ -1,0 +1,203 @@
+{
+  "channels": {
+    "self.identity": {
+      "enabled": true,
+      "intervalMs": 100
+    },
+    "self.pose": {
+      "enabled": true,
+      "intervalMs": 100
+    },
+    "self.vitals": {
+      "enabled": true,
+      "intervalMs": 100
+    },
+    "self.experience": {
+      "enabled": true,
+      "intervalMs": 100
+    },
+    "self.effects": {
+      "enabled": true,
+      "intervalMs": 100
+    },
+    "self.attributes": {
+      "enabled": true,
+      "intervalMs": 100
+    },
+    "self.physics": {
+      "enabled": true,
+      "intervalMs": 100
+    },
+    "self.controls": {
+      "enabled": true,
+      "intervalMs": 100
+    },
+    "self.inventory": {
+      "enabled": true,
+      "intervalMs": 100
+    },
+    "self.digging": {
+      "enabled": true,
+      "intervalMs": 100
+    },
+    "self.abilities": {
+      "enabled": true,
+      "intervalMs": 100
+    },
+    "self.cooldowns": {
+      "enabled": true,
+      "intervalMs": 100
+    },
+    "world.game": {
+      "enabled": true,
+      "intervalMs": 100
+    },
+    "world.time": {
+      "enabled": true,
+      "intervalMs": 100
+    },
+    "world.weather": {
+      "enabled": true,
+      "intervalMs": 100
+    },
+    "world.spawn": {
+      "enabled": true,
+      "intervalMs": 100
+    },
+    "world.border": {
+      "enabled": true,
+      "intervalMs": 100
+    },
+    "world.blocks": {
+      "enabled": true,
+      "intervalMs": 500
+    },
+    "world.chunks": {
+      "enabled": true,
+      "intervalMs": 1000
+    },
+    "world.blockEntities": {
+      "enabled": true,
+      "intervalMs": 500
+    },
+    "world.maps": {
+      "enabled": true,
+      "intervalMs": 500
+    },
+    "entities.visible": {
+      "enabled": true,
+      "intervalMs": 100
+    },
+    "players.tab": {
+      "enabled": true,
+      "intervalMs": 500
+    },
+    "ui.window": {
+      "enabled": true,
+      "intervalMs": 100
+    },
+    "ui.scoreboards": {
+      "enabled": true,
+      "intervalMs": 100
+    },
+    "ui.bossBars": {
+      "enabled": true,
+      "intervalMs": 100
+    },
+    "ui.titles": {
+      "enabled": true,
+      "intervalMs": 100
+    },
+    "ui.combat": {
+      "enabled": true,
+      "intervalMs": 100
+    },
+    "knowledge.recipes": {
+      "enabled": true,
+      "intervalMs": 1000
+    },
+    "knowledge.advancements": {
+      "enabled": true,
+      "intervalMs": 1000
+    },
+    "knowledge.statistics": {
+      "enabled": true,
+      "intervalMs": 1000
+    },
+    "knowledge.commands": {
+      "enabled": true,
+      "intervalMs": 1000
+    },
+    "knowledge.tags": {
+      "enabled": true,
+      "intervalMs": 1000
+    },
+    "knowledge.resourcePack": {
+      "enabled": true,
+      "intervalMs": 1000
+    },
+    "events.sounds": {
+      "enabled": true,
+      "intervalMs": 0
+    },
+    "events.particles": {
+      "enabled": true,
+      "intervalMs": 0
+    },
+    "events.entities": {
+      "enabled": true,
+      "intervalMs": 0
+    },
+    "events.blocks": {
+      "enabled": true,
+      "intervalMs": 0
+    },
+    "events.messages": {
+      "enabled": true,
+      "intervalMs": 0
+    },
+    "events.inventory": {
+      "enabled": true,
+      "intervalMs": 0
+    },
+    "events.lifecycle": {
+      "enabled": true,
+      "intervalMs": 0
+    },
+    "vision.geometry": {
+      "enabled": true,
+      "intervalMs": 500
+    },
+    "vision.rgb": {
+      "enabled": false,
+      "intervalMs": 100
+    },
+    "audio.pcm": {
+      "enabled": false,
+      "intervalMs": 100
+    },
+    "audio.capture": {
+      "enabled": false,
+      "intervalMs": 100
+    },
+    "protocol.packets": {
+      "enabled": false,
+      "intervalMs": 0
+    }
+  },
+  "limits": {
+    "eventCount": 512,
+    "eventBytes": 2097152,
+    "packetBytes": 1048576,
+    "eventWindowMs": 5000,
+    "blockRadius": 2,
+    "entities": 64,
+    "visionWidth": 32,
+    "visionHeight": 24,
+    "visionDistance": 32,
+    "visionFov": 90,
+    "audioSampleRate": 16000,
+    "audioWindowMs": 250
+  },
+  "record": false
+}

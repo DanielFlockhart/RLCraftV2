@@ -1,0 +1,1869 @@
+{
+  "minecraftVersion": "1.18.1",
+  "protocolVersion": 757,
+  "dataVersion": 2865,
+  "source": "Installed minecraft-data registry (pc/Java)",
+  "minecraftDataPackageVersion": "3.117.0",
+  "effectiveDataVersion": {
+    "dataVersion": 2865,
+    "type": "pc",
+    "majorVersion": "1.18",
+    "minecraftVersion": "1.18.1",
+    "version": 757
+  },
+  "direction": "serverbound",
+  "state": "play",
+  "count": 48,
+  "note": "Schemas are versioned wire formats, not permission grants or RLCraft action capabilities. Conditional fields retain their original switch/option definitions.",
+  "baselineModeReference": {
+    "windowClick": {
+      "0": "pickup",
+      "1": "quick move",
+      "2": "hotbar/offhand swap",
+      "3": "creative clone",
+      "4": "throw",
+      "5": "quick craft drag",
+      "6": "pickup all"
+    },
+    "blockDig": {
+      "0": "start digging",
+      "1": "cancel digging",
+      "2": "finish digging",
+      "3": "drop held stack",
+      "4": "drop one held item",
+      "5": "release item use",
+      "6": "swap hands"
+    },
+    "entityAction": {
+      "0": "start sneaking",
+      "1": "stop sneaking",
+      "2": "leave bed",
+      "3": "start sprinting",
+      "4": "stop sprinting",
+      "5": "start horse jump",
+      "6": "stop horse jump",
+      "7": "open horse inventory",
+      "8": "start elytra flight"
+    },
+    "useEntity": { "0": "interact", "1": "attack", "2": "interact at" },
+    "clientCommand": { "0": "request respawn", "1": "request statistics" }
+  },
+  "packets": [
+    {
+      "id": "0x00",
+      "name": "teleport_confirm",
+      "schema": ["container", [{ "name": "teleportId", "type": "varint" }]],
+      "purpose": "Maintenance: acknowledge server teleport; not a teleport ability."
+    },
+    {
+      "id": "0x01",
+      "name": "query_block_nbt",
+      "schema": [
+        "container",
+        [
+          { "name": "transactionId", "type": "varint" },
+          { "name": "location", "type": "position" }
+        ]
+      ],
+      "purpose": "Restricted: debug block-NBT query."
+    },
+    {
+      "id": "0x02",
+      "name": "set_difficulty",
+      "schema": [
+        "container",
+        [
+          {
+            "name": "newDifficulty",
+            "type": [
+              "mapper",
+              {
+                "type": "u8",
+                "mappings": {
+                  "0": "peaceful",
+                  "1": "easy",
+                  "2": "normal",
+                  "3": "hard"
+                }
+              }
+            ]
+          }
+        ]
+      ],
+      "purpose": "Restricted: request difficulty change where permitted."
+    },
+    {
+      "id": "0x03",
+      "name": "chat",
+      "schema": ["container", [{ "name": "message", "type": "string" }]],
+      "purpose": "Submit chat or slash command; command permissions apply."
+    },
+    {
+      "id": "0x04",
+      "name": "client_command",
+      "schema": [
+        "container",
+        [
+          {
+            "name": "actionId",
+            "type": [
+              "mapper",
+              {
+                "type": "varint",
+                "mappings": { "0": "perform_respawn", "1": "request_stats" }
+              }
+            ]
+          }
+        ]
+      ],
+      "purpose": "Request respawn or updated statistics."
+    },
+    {
+      "id": "0x05",
+      "name": "settings",
+      "schema": [
+        "container",
+        [
+          { "name": "locale", "type": "string" },
+          { "name": "viewDistance", "type": "i8" },
+          { "name": "chatFlags", "type": "varint" },
+          { "name": "chatColors", "type": "bool" },
+          { "name": "skinParts", "type": "u8" },
+          { "name": "mainHand", "type": "varint" },
+          { "name": "enableTextFiltering", "type": "bool" },
+          { "name": "enableServerListing", "type": "bool" }
+        ]
+      ],
+      "purpose": "Send client preferences, not world rules."
+    },
+    {
+      "id": "0x06",
+      "name": "tab_complete",
+      "schema": [
+        "container",
+        [
+          { "name": "transactionId", "type": "varint" },
+          { "name": "text", "type": "string" }
+        ]
+      ],
+      "purpose": "Request text/command completions."
+    },
+    {
+      "id": "0x07",
+      "name": "enchant_item",
+      "schema": [
+        "container",
+        [
+          { "name": "windowId", "type": "i8" },
+          { "name": "enchantment", "type": "i8" }
+        ]
+      ],
+      "purpose": "Select current menu button; also used outside enchanting."
+    },
+    {
+      "id": "0x08",
+      "name": "window_click",
+      "schema": [
+        "container",
+        [
+          { "name": "windowId", "type": "u8" },
+          { "name": "stateId", "type": "varint" },
+          { "name": "slot", "type": "i16" },
+          { "name": "mouseButton", "type": "i8" },
+          { "name": "mode", "type": "varint" },
+          {
+            "name": "changedSlots",
+            "type": [
+              "array",
+              {
+                "countType": "varint",
+                "type": [
+                  "container",
+                  [
+                    { "name": "location", "type": "i16" },
+                    { "name": "item", "type": "slot" }
+                  ]
+                ]
+              }
+            ]
+          },
+          { "name": "cursorItem", "type": "slot" }
+        ]
+      ],
+      "purpose": "Inventory/menu click, revision and predicted changes."
+    },
+    {
+      "id": "0x09",
+      "name": "close_window",
+      "schema": ["container", [{ "name": "windowId", "type": "u8" }]],
+      "purpose": "Close current inventory/container menu."
+    },
+    {
+      "id": "0x0a",
+      "name": "custom_payload",
+      "schema": [
+        "container",
+        [
+          { "name": "channel", "type": "string" },
+          { "name": "data", "type": "restBuffer" }
+        ]
+      ],
+      "purpose": "Client-brand/plugin/mod payload; channel-defined behavior."
+    },
+    {
+      "id": "0x0b",
+      "name": "edit_book",
+      "schema": [
+        "container",
+        [
+          { "name": "hand", "type": "varint" },
+          {
+            "name": "pages",
+            "type": ["array", { "countType": "varint", "type": "string" }]
+          },
+          { "name": "title", "type": ["option", "string"] }
+        ]
+      ],
+      "purpose": "Edit book; optional title signs it. Legacy hand field means inventory slot in this version."
+    },
+    {
+      "id": "0x0c",
+      "name": "query_entity_nbt",
+      "schema": [
+        "container",
+        [
+          { "name": "transactionId", "type": "varint" },
+          { "name": "entityId", "type": "varint" }
+        ]
+      ],
+      "purpose": "Restricted: debug entity-NBT query."
+    },
+    {
+      "id": "0x0d",
+      "name": "use_entity",
+      "schema": [
+        "container",
+        [
+          { "name": "target", "type": "varint" },
+          { "name": "mouse", "type": "varint" },
+          {
+            "name": "x",
+            "type": [
+              "switch",
+              {
+                "compareTo": "mouse",
+                "fields": { "2": "f32" },
+                "default": "void"
+              }
+            ]
+          },
+          {
+            "name": "y",
+            "type": [
+              "switch",
+              {
+                "compareTo": "mouse",
+                "fields": { "2": "f32" },
+                "default": "void"
+              }
+            ]
+          },
+          {
+            "name": "z",
+            "type": [
+              "switch",
+              {
+                "compareTo": "mouse",
+                "fields": { "2": "f32" },
+                "default": "void"
+              }
+            ]
+          },
+          {
+            "name": "hand",
+            "type": [
+              "switch",
+              {
+                "compareTo": "mouse",
+                "fields": { "0": "varint", "2": "varint" },
+                "default": "void"
+              }
+            ]
+          },
+          { "name": "sneaking", "type": "bool" }
+        ]
+      ],
+      "purpose": "Interact, attack, or interact at entity-local point."
+    },
+    {
+      "id": "0x0e",
+      "name": "generate_structure",
+      "schema": [
+        "container",
+        [
+          { "name": "location", "type": "position" },
+          { "name": "levels", "type": "varint" },
+          { "name": "keepJigsaws", "type": "bool" }
+        ]
+      ],
+      "purpose": "Restricted: request jigsaw structure generation."
+    },
+    {
+      "id": "0x0f",
+      "name": "keep_alive",
+      "schema": ["container", [{ "name": "keepAliveId", "type": "i64" }]],
+      "purpose": "Maintenance: heartbeat reply."
+    },
+    {
+      "id": "0x10",
+      "name": "lock_difficulty",
+      "schema": ["container", [{ "name": "locked", "type": "bool" }]],
+      "purpose": "Restricted: request difficulty lock where permitted."
+    },
+    {
+      "id": "0x11",
+      "name": "position",
+      "schema": [
+        "container",
+        [
+          { "name": "x", "type": "f64" },
+          { "name": "y", "type": "f64" },
+          { "name": "z", "type": "f64" },
+          { "name": "onGround", "type": "bool" }
+        ]
+      ],
+      "purpose": "Report control/physics-generated position; server validates."
+    },
+    {
+      "id": "0x12",
+      "name": "position_look",
+      "schema": [
+        "container",
+        [
+          { "name": "x", "type": "f64" },
+          { "name": "y", "type": "f64" },
+          { "name": "z", "type": "f64" },
+          { "name": "yaw", "type": "f32" },
+          { "name": "pitch", "type": "f32" },
+          { "name": "onGround", "type": "bool" }
+        ]
+      ],
+      "purpose": "Report position and camera together; server validates."
+    },
+    {
+      "id": "0x13",
+      "name": "look",
+      "schema": [
+        "container",
+        [
+          { "name": "yaw", "type": "f32" },
+          { "name": "pitch", "type": "f32" },
+          { "name": "onGround", "type": "bool" }
+        ]
+      ],
+      "purpose": "Report camera orientation in protocol degrees."
+    },
+    {
+      "id": "0x14",
+      "name": "flying",
+      "schema": ["container", [{ "name": "onGround", "type": "bool" }]],
+      "purpose": "Report on-ground state; packet name does not grant flight."
+    },
+    {
+      "id": "0x15",
+      "name": "vehicle_move",
+      "schema": [
+        "container",
+        [
+          { "name": "x", "type": "f64" },
+          { "name": "y", "type": "f64" },
+          { "name": "z", "type": "f64" },
+          { "name": "yaw", "type": "f32" },
+          { "name": "pitch", "type": "f32" }
+        ]
+      ],
+      "purpose": "Report controlled vehicle position/orientation."
+    },
+    {
+      "id": "0x16",
+      "name": "steer_boat",
+      "schema": [
+        "container",
+        [
+          { "name": "leftPaddle", "type": "bool" },
+          { "name": "rightPaddle", "type": "bool" }
+        ]
+      ],
+      "purpose": "Report boat paddle input."
+    },
+    {
+      "id": "0x17",
+      "name": "pick_item",
+      "schema": ["container", [{ "name": "slot", "type": "varint" }]],
+      "purpose": "Move existing inventory item to selected hotbar slot."
+    },
+    {
+      "id": "0x18",
+      "name": "craft_recipe_request",
+      "schema": [
+        "container",
+        [
+          { "name": "windowId", "type": "i8" },
+          { "name": "recipe", "type": "string" },
+          { "name": "makeAll", "type": "bool" }
+        ]
+      ],
+      "purpose": "Request recipe placement in current crafting menu."
+    },
+    {
+      "id": "0x19",
+      "name": "abilities",
+      "schema": ["container", [{ "name": "flags", "type": "i8" }]],
+      "purpose": "Toggle flying only if server has granted permission."
+    },
+    {
+      "id": "0x1a",
+      "name": "block_dig",
+      "schema": [
+        "container",
+        [
+          { "name": "status", "type": "varint" },
+          { "name": "location", "type": "position" },
+          { "name": "face", "type": "i8" }
+        ]
+      ],
+      "purpose": "Mine start/cancel/finish, drop stack/item, release use, swap hands."
+    },
+    {
+      "id": "0x1b",
+      "name": "entity_action",
+      "schema": [
+        "container",
+        [
+          { "name": "entityId", "type": "varint" },
+          {
+            "name": "actionId",
+            "type": [
+              "mapper",
+              {
+                "type": "varint",
+                "mappings": {
+                  "0": "start_sneaking",
+                  "1": "stop_sneaking",
+                  "2": "stop_sleeping",
+                  "3": "start_sprinting",
+                  "4": "stop_sprinting",
+                  "5": "start_riding_jump",
+                  "6": "stop_riding_jump",
+                  "7": "open_inventory",
+                  "8": "start_fall_flying"
+                }
+              }
+            ]
+          },
+          { "name": "jumpBoost", "type": "varint" }
+        ]
+      ],
+      "purpose": "Sneak/sprint, leave bed, horse jump/inventory, elytra start."
+    },
+    {
+      "id": "0x1c",
+      "name": "steer_vehicle",
+      "schema": [
+        "container",
+        [
+          { "name": "sideways", "type": "f32" },
+          { "name": "forward", "type": "f32" },
+          { "name": "jump", "type": "u8" }
+        ]
+      ],
+      "purpose": "Vehicle directional input and jump/dismount flags."
+    },
+    {
+      "id": "0x1d",
+      "name": "pong",
+      "schema": ["container", [{ "name": "id", "type": "i32" }]],
+      "purpose": "Maintenance: reply to server ping."
+    },
+    {
+      "id": "0x1e",
+      "name": "recipe_book",
+      "schema": [
+        "container",
+        [
+          { "name": "bookId", "type": "varint" },
+          { "name": "bookOpen", "type": "bool" },
+          { "name": "filterActive", "type": "bool" }
+        ]
+      ],
+      "purpose": "Set recipe-book open/filter preferences."
+    },
+    {
+      "id": "0x1f",
+      "name": "displayed_recipe",
+      "schema": ["container", [{ "name": "recipeId", "type": "string" }]],
+      "purpose": "Acknowledge displayed recipe."
+    },
+    {
+      "id": "0x20",
+      "name": "name_item",
+      "schema": ["container", [{ "name": "name", "type": "string" }]],
+      "purpose": "Change anvil naming text."
+    },
+    {
+      "id": "0x21",
+      "name": "resource_pack_receive",
+      "schema": ["container", [{ "name": "result", "type": "varint" }]],
+      "purpose": "Report resource-pack acceptance/download outcome."
+    },
+    {
+      "id": "0x22",
+      "name": "advancement_tab",
+      "schema": [
+        "container",
+        [
+          { "name": "action", "type": "varint" },
+          {
+            "name": "tabId",
+            "type": [
+              "switch",
+              {
+                "compareTo": "action",
+                "fields": { "0": "string", "1": "void" }
+              }
+            ]
+          }
+        ]
+      ],
+      "purpose": "Select advancement tab or report screen close."
+    },
+    {
+      "id": "0x23",
+      "name": "select_trade",
+      "schema": ["container", [{ "name": "slot", "type": "varint" }]],
+      "purpose": "Select displayed trade offer."
+    },
+    {
+      "id": "0x24",
+      "name": "set_beacon_effect",
+      "schema": [
+        "container",
+        [
+          { "name": "primary_effect", "type": "varint" },
+          { "name": "secondary_effect", "type": "varint" }
+        ]
+      ],
+      "purpose": "Choose beacon powers; payment/level restrictions apply."
+    },
+    {
+      "id": "0x25",
+      "name": "held_item_slot",
+      "schema": ["container", [{ "name": "slotId", "type": "i16" }]],
+      "purpose": "Select hotbar slot 0–8."
+    },
+    {
+      "id": "0x26",
+      "name": "update_command_block",
+      "schema": [
+        "container",
+        [
+          { "name": "location", "type": "position" },
+          { "name": "command", "type": "string" },
+          { "name": "mode", "type": "varint" },
+          { "name": "flags", "type": "u8" }
+        ]
+      ],
+      "purpose": "Restricted: edit command block."
+    },
+    {
+      "id": "0x27",
+      "name": "update_command_block_minecart",
+      "schema": [
+        "container",
+        [
+          { "name": "entityId", "type": "varint" },
+          { "name": "command", "type": "string" },
+          { "name": "track_output", "type": "bool" }
+        ]
+      ],
+      "purpose": "Restricted: edit command-block minecart."
+    },
+    {
+      "id": "0x28",
+      "name": "set_creative_slot",
+      "schema": [
+        "container",
+        [
+          { "name": "slot", "type": "i16" },
+          { "name": "item", "type": "slot" }
+        ]
+      ],
+      "purpose": "Creative: set/delete stack or drop via special slot."
+    },
+    {
+      "id": "0x29",
+      "name": "update_jigsaw_block",
+      "schema": [
+        "container",
+        [
+          { "name": "location", "type": "position" },
+          { "name": "name", "type": "string" },
+          { "name": "target", "type": "string" },
+          { "name": "pool", "type": "string" },
+          { "name": "finalState", "type": "string" },
+          { "name": "jointType", "type": "string" }
+        ]
+      ],
+      "purpose": "Restricted: edit jigsaw configuration."
+    },
+    {
+      "id": "0x2a",
+      "name": "update_structure_block",
+      "schema": [
+        "container",
+        [
+          { "name": "location", "type": "position" },
+          { "name": "action", "type": "varint" },
+          { "name": "mode", "type": "varint" },
+          { "name": "name", "type": "string" },
+          { "name": "offset_x", "type": "i8" },
+          { "name": "offset_y", "type": "i8" },
+          { "name": "offset_z", "type": "i8" },
+          { "name": "size_x", "type": "i8" },
+          { "name": "size_y", "type": "i8" },
+          { "name": "size_z", "type": "i8" },
+          { "name": "mirror", "type": "varint" },
+          { "name": "rotation", "type": "varint" },
+          { "name": "metadata", "type": "string" },
+          { "name": "integrity", "type": "f32" },
+          { "name": "seed", "type": "varlong" },
+          { "name": "flags", "type": "u8" }
+        ]
+      ],
+      "purpose": "Restricted: configure/save/load structure block."
+    },
+    {
+      "id": "0x2b",
+      "name": "update_sign",
+      "schema": [
+        "container",
+        [
+          { "name": "location", "type": "position" },
+          { "name": "text1", "type": "string" },
+          { "name": "text2", "type": "string" },
+          { "name": "text3", "type": "string" },
+          { "name": "text4", "type": "string" }
+        ]
+      ],
+      "purpose": "Submit four sign lines through valid editor context."
+    },
+    {
+      "id": "0x2c",
+      "name": "arm_animation",
+      "schema": ["container", [{ "name": "hand", "type": "varint" }]],
+      "purpose": "Swing hand; damage/mining is separate."
+    },
+    {
+      "id": "0x2d",
+      "name": "spectate",
+      "schema": ["container", [{ "name": "target", "type": "UUID" }]],
+      "purpose": "Spectator: request camera/teleport target UUID."
+    },
+    {
+      "id": "0x2e",
+      "name": "block_place",
+      "schema": [
+        "container",
+        [
+          { "name": "hand", "type": "varint" },
+          { "name": "location", "type": "position" },
+          { "name": "direction", "type": "varint" },
+          { "name": "cursorX", "type": "f32" },
+          { "name": "cursorY", "type": "f32" },
+          { "name": "cursorZ", "type": "f32" },
+          { "name": "insideBlock", "type": "bool" }
+        ]
+      ],
+      "purpose": "Use item on block hit point; may place or interact."
+    },
+    {
+      "id": "0x2f",
+      "name": "use_item",
+      "schema": ["container", [{ "name": "hand", "type": "varint" }]],
+      "purpose": "Use held item in air with selected hand."
+    }
+  ],
+  "serverboundTypes": {
+    "packet_teleport_confirm": [
+      "container",
+      [{ "name": "teleportId", "type": "varint" }]
+    ],
+    "packet_query_block_nbt": [
+      "container",
+      [
+        { "name": "transactionId", "type": "varint" },
+        { "name": "location", "type": "position" }
+      ]
+    ],
+    "packet_set_difficulty": [
+      "container",
+      [
+        {
+          "name": "newDifficulty",
+          "type": [
+            "mapper",
+            {
+              "type": "u8",
+              "mappings": {
+                "0": "peaceful",
+                "1": "easy",
+                "2": "normal",
+                "3": "hard"
+              }
+            }
+          ]
+        }
+      ]
+    ],
+    "packet_edit_book": [
+      "container",
+      [
+        { "name": "hand", "type": "varint" },
+        {
+          "name": "pages",
+          "type": ["array", { "countType": "varint", "type": "string" }]
+        },
+        { "name": "title", "type": ["option", "string"] }
+      ]
+    ],
+    "packet_query_entity_nbt": [
+      "container",
+      [
+        { "name": "transactionId", "type": "varint" },
+        { "name": "entityId", "type": "varint" }
+      ]
+    ],
+    "packet_pick_item": ["container", [{ "name": "slot", "type": "varint" }]],
+    "packet_name_item": ["container", [{ "name": "name", "type": "string" }]],
+    "packet_select_trade": [
+      "container",
+      [{ "name": "slot", "type": "varint" }]
+    ],
+    "packet_set_beacon_effect": [
+      "container",
+      [
+        { "name": "primary_effect", "type": "varint" },
+        { "name": "secondary_effect", "type": "varint" }
+      ]
+    ],
+    "packet_update_command_block": [
+      "container",
+      [
+        { "name": "location", "type": "position" },
+        { "name": "command", "type": "string" },
+        { "name": "mode", "type": "varint" },
+        { "name": "flags", "type": "u8" }
+      ]
+    ],
+    "packet_update_command_block_minecart": [
+      "container",
+      [
+        { "name": "entityId", "type": "varint" },
+        { "name": "command", "type": "string" },
+        { "name": "track_output", "type": "bool" }
+      ]
+    ],
+    "packet_update_structure_block": [
+      "container",
+      [
+        { "name": "location", "type": "position" },
+        { "name": "action", "type": "varint" },
+        { "name": "mode", "type": "varint" },
+        { "name": "name", "type": "string" },
+        { "name": "offset_x", "type": "i8" },
+        { "name": "offset_y", "type": "i8" },
+        { "name": "offset_z", "type": "i8" },
+        { "name": "size_x", "type": "i8" },
+        { "name": "size_y", "type": "i8" },
+        { "name": "size_z", "type": "i8" },
+        { "name": "mirror", "type": "varint" },
+        { "name": "rotation", "type": "varint" },
+        { "name": "metadata", "type": "string" },
+        { "name": "integrity", "type": "f32" },
+        { "name": "seed", "type": "varlong" },
+        { "name": "flags", "type": "u8" }
+      ]
+    ],
+    "packet_tab_complete": [
+      "container",
+      [
+        { "name": "transactionId", "type": "varint" },
+        { "name": "text", "type": "string" }
+      ]
+    ],
+    "packet_chat": ["container", [{ "name": "message", "type": "string" }]],
+    "packet_client_command": [
+      "container",
+      [
+        {
+          "name": "actionId",
+          "type": [
+            "mapper",
+            {
+              "type": "varint",
+              "mappings": { "0": "perform_respawn", "1": "request_stats" }
+            }
+          ]
+        }
+      ]
+    ],
+    "packet_settings": [
+      "container",
+      [
+        { "name": "locale", "type": "string" },
+        { "name": "viewDistance", "type": "i8" },
+        { "name": "chatFlags", "type": "varint" },
+        { "name": "chatColors", "type": "bool" },
+        { "name": "skinParts", "type": "u8" },
+        { "name": "mainHand", "type": "varint" },
+        { "name": "enableTextFiltering", "type": "bool" },
+        { "name": "enableServerListing", "type": "bool" }
+      ]
+    ],
+    "packet_enchant_item": [
+      "container",
+      [
+        { "name": "windowId", "type": "i8" },
+        { "name": "enchantment", "type": "i8" }
+      ]
+    ],
+    "packet_window_click": [
+      "container",
+      [
+        { "name": "windowId", "type": "u8" },
+        { "name": "stateId", "type": "varint" },
+        { "name": "slot", "type": "i16" },
+        { "name": "mouseButton", "type": "i8" },
+        { "name": "mode", "type": "varint" },
+        {
+          "name": "changedSlots",
+          "type": [
+            "array",
+            {
+              "countType": "varint",
+              "type": [
+                "container",
+                [
+                  { "name": "location", "type": "i16" },
+                  { "name": "item", "type": "slot" }
+                ]
+              ]
+            }
+          ]
+        },
+        { "name": "cursorItem", "type": "slot" }
+      ]
+    ],
+    "packet_close_window": [
+      "container",
+      [{ "name": "windowId", "type": "u8" }]
+    ],
+    "packet_custom_payload": [
+      "container",
+      [
+        { "name": "channel", "type": "string" },
+        { "name": "data", "type": "restBuffer" }
+      ]
+    ],
+    "packet_use_entity": [
+      "container",
+      [
+        { "name": "target", "type": "varint" },
+        { "name": "mouse", "type": "varint" },
+        {
+          "name": "x",
+          "type": [
+            "switch",
+            {
+              "compareTo": "mouse",
+              "fields": { "2": "f32" },
+              "default": "void"
+            }
+          ]
+        },
+        {
+          "name": "y",
+          "type": [
+            "switch",
+            {
+              "compareTo": "mouse",
+              "fields": { "2": "f32" },
+              "default": "void"
+            }
+          ]
+        },
+        {
+          "name": "z",
+          "type": [
+            "switch",
+            {
+              "compareTo": "mouse",
+              "fields": { "2": "f32" },
+              "default": "void"
+            }
+          ]
+        },
+        {
+          "name": "hand",
+          "type": [
+            "switch",
+            {
+              "compareTo": "mouse",
+              "fields": { "0": "varint", "2": "varint" },
+              "default": "void"
+            }
+          ]
+        },
+        { "name": "sneaking", "type": "bool" }
+      ]
+    ],
+    "packet_generate_structure": [
+      "container",
+      [
+        { "name": "location", "type": "position" },
+        { "name": "levels", "type": "varint" },
+        { "name": "keepJigsaws", "type": "bool" }
+      ]
+    ],
+    "packet_keep_alive": [
+      "container",
+      [{ "name": "keepAliveId", "type": "i64" }]
+    ],
+    "packet_lock_difficulty": [
+      "container",
+      [{ "name": "locked", "type": "bool" }]
+    ],
+    "packet_position": [
+      "container",
+      [
+        { "name": "x", "type": "f64" },
+        { "name": "y", "type": "f64" },
+        { "name": "z", "type": "f64" },
+        { "name": "onGround", "type": "bool" }
+      ]
+    ],
+    "packet_position_look": [
+      "container",
+      [
+        { "name": "x", "type": "f64" },
+        { "name": "y", "type": "f64" },
+        { "name": "z", "type": "f64" },
+        { "name": "yaw", "type": "f32" },
+        { "name": "pitch", "type": "f32" },
+        { "name": "onGround", "type": "bool" }
+      ]
+    ],
+    "packet_look": [
+      "container",
+      [
+        { "name": "yaw", "type": "f32" },
+        { "name": "pitch", "type": "f32" },
+        { "name": "onGround", "type": "bool" }
+      ]
+    ],
+    "packet_flying": ["container", [{ "name": "onGround", "type": "bool" }]],
+    "packet_vehicle_move": [
+      "container",
+      [
+        { "name": "x", "type": "f64" },
+        { "name": "y", "type": "f64" },
+        { "name": "z", "type": "f64" },
+        { "name": "yaw", "type": "f32" },
+        { "name": "pitch", "type": "f32" }
+      ]
+    ],
+    "packet_steer_boat": [
+      "container",
+      [
+        { "name": "leftPaddle", "type": "bool" },
+        { "name": "rightPaddle", "type": "bool" }
+      ]
+    ],
+    "packet_craft_recipe_request": [
+      "container",
+      [
+        { "name": "windowId", "type": "i8" },
+        { "name": "recipe", "type": "string" },
+        { "name": "makeAll", "type": "bool" }
+      ]
+    ],
+    "packet_abilities": ["container", [{ "name": "flags", "type": "i8" }]],
+    "packet_block_dig": [
+      "container",
+      [
+        { "name": "status", "type": "varint" },
+        { "name": "location", "type": "position" },
+        { "name": "face", "type": "i8" }
+      ]
+    ],
+    "packet_entity_action": [
+      "container",
+      [
+        { "name": "entityId", "type": "varint" },
+        {
+          "name": "actionId",
+          "type": [
+            "mapper",
+            {
+              "type": "varint",
+              "mappings": {
+                "0": "start_sneaking",
+                "1": "stop_sneaking",
+                "2": "stop_sleeping",
+                "3": "start_sprinting",
+                "4": "stop_sprinting",
+                "5": "start_riding_jump",
+                "6": "stop_riding_jump",
+                "7": "open_inventory",
+                "8": "start_fall_flying"
+              }
+            }
+          ]
+        },
+        { "name": "jumpBoost", "type": "varint" }
+      ]
+    ],
+    "packet_steer_vehicle": [
+      "container",
+      [
+        { "name": "sideways", "type": "f32" },
+        { "name": "forward", "type": "f32" },
+        { "name": "jump", "type": "u8" }
+      ]
+    ],
+    "packet_displayed_recipe": [
+      "container",
+      [{ "name": "recipeId", "type": "string" }]
+    ],
+    "packet_recipe_book": [
+      "container",
+      [
+        { "name": "bookId", "type": "varint" },
+        { "name": "bookOpen", "type": "bool" },
+        { "name": "filterActive", "type": "bool" }
+      ]
+    ],
+    "packet_resource_pack_receive": [
+      "container",
+      [{ "name": "result", "type": "varint" }]
+    ],
+    "packet_held_item_slot": [
+      "container",
+      [{ "name": "slotId", "type": "i16" }]
+    ],
+    "packet_set_creative_slot": [
+      "container",
+      [
+        { "name": "slot", "type": "i16" },
+        { "name": "item", "type": "slot" }
+      ]
+    ],
+    "packet_update_jigsaw_block": [
+      "container",
+      [
+        { "name": "location", "type": "position" },
+        { "name": "name", "type": "string" },
+        { "name": "target", "type": "string" },
+        { "name": "pool", "type": "string" },
+        { "name": "finalState", "type": "string" },
+        { "name": "jointType", "type": "string" }
+      ]
+    ],
+    "packet_update_sign": [
+      "container",
+      [
+        { "name": "location", "type": "position" },
+        { "name": "text1", "type": "string" },
+        { "name": "text2", "type": "string" },
+        { "name": "text3", "type": "string" },
+        { "name": "text4", "type": "string" }
+      ]
+    ],
+    "packet_arm_animation": [
+      "container",
+      [{ "name": "hand", "type": "varint" }]
+    ],
+    "packet_spectate": ["container", [{ "name": "target", "type": "UUID" }]],
+    "packet_block_place": [
+      "container",
+      [
+        { "name": "hand", "type": "varint" },
+        { "name": "location", "type": "position" },
+        { "name": "direction", "type": "varint" },
+        { "name": "cursorX", "type": "f32" },
+        { "name": "cursorY", "type": "f32" },
+        { "name": "cursorZ", "type": "f32" },
+        { "name": "insideBlock", "type": "bool" }
+      ]
+    ],
+    "packet_use_item": ["container", [{ "name": "hand", "type": "varint" }]],
+    "packet_advancement_tab": [
+      "container",
+      [
+        { "name": "action", "type": "varint" },
+        {
+          "name": "tabId",
+          "type": [
+            "switch",
+            { "compareTo": "action", "fields": { "0": "string", "1": "void" } }
+          ]
+        }
+      ]
+    ],
+    "packet_pong": ["container", [{ "name": "id", "type": "i32" }]],
+    "packet": [
+      "container",
+      [
+        {
+          "name": "name",
+          "type": [
+            "mapper",
+            {
+              "type": "varint",
+              "mappings": {
+                "0x00": "teleport_confirm",
+                "0x01": "query_block_nbt",
+                "0x02": "set_difficulty",
+                "0x03": "chat",
+                "0x04": "client_command",
+                "0x05": "settings",
+                "0x06": "tab_complete",
+                "0x07": "enchant_item",
+                "0x08": "window_click",
+                "0x09": "close_window",
+                "0x0a": "custom_payload",
+                "0x0b": "edit_book",
+                "0x0c": "query_entity_nbt",
+                "0x0d": "use_entity",
+                "0x0e": "generate_structure",
+                "0x0f": "keep_alive",
+                "0x10": "lock_difficulty",
+                "0x11": "position",
+                "0x12": "position_look",
+                "0x13": "look",
+                "0x14": "flying",
+                "0x15": "vehicle_move",
+                "0x16": "steer_boat",
+                "0x17": "pick_item",
+                "0x18": "craft_recipe_request",
+                "0x19": "abilities",
+                "0x1a": "block_dig",
+                "0x1b": "entity_action",
+                "0x1c": "steer_vehicle",
+                "0x1d": "pong",
+                "0x1e": "recipe_book",
+                "0x1f": "displayed_recipe",
+                "0x20": "name_item",
+                "0x21": "resource_pack_receive",
+                "0x22": "advancement_tab",
+                "0x23": "select_trade",
+                "0x24": "set_beacon_effect",
+                "0x25": "held_item_slot",
+                "0x26": "update_command_block",
+                "0x27": "update_command_block_minecart",
+                "0x28": "set_creative_slot",
+                "0x29": "update_jigsaw_block",
+                "0x2a": "update_structure_block",
+                "0x2b": "update_sign",
+                "0x2c": "arm_animation",
+                "0x2d": "spectate",
+                "0x2e": "block_place",
+                "0x2f": "use_item"
+              }
+            }
+          ]
+        },
+        {
+          "name": "params",
+          "type": [
+            "switch",
+            {
+              "compareTo": "name",
+              "fields": {
+                "teleport_confirm": "packet_teleport_confirm",
+                "query_block_nbt": "packet_query_block_nbt",
+                "set_difficulty": "packet_set_difficulty",
+                "edit_book": "packet_edit_book",
+                "query_entity_nbt": "packet_query_entity_nbt",
+                "pick_item": "packet_pick_item",
+                "name_item": "packet_name_item",
+                "select_trade": "packet_select_trade",
+                "set_beacon_effect": "packet_set_beacon_effect",
+                "update_command_block": "packet_update_command_block",
+                "update_command_block_minecart": "packet_update_command_block_minecart",
+                "update_structure_block": "packet_update_structure_block",
+                "tab_complete": "packet_tab_complete",
+                "chat": "packet_chat",
+                "client_command": "packet_client_command",
+                "settings": "packet_settings",
+                "enchant_item": "packet_enchant_item",
+                "window_click": "packet_window_click",
+                "close_window": "packet_close_window",
+                "custom_payload": "packet_custom_payload",
+                "use_entity": "packet_use_entity",
+                "generate_structure": "packet_generate_structure",
+                "keep_alive": "packet_keep_alive",
+                "lock_difficulty": "packet_lock_difficulty",
+                "position": "packet_position",
+                "position_look": "packet_position_look",
+                "look": "packet_look",
+                "flying": "packet_flying",
+                "vehicle_move": "packet_vehicle_move",
+                "steer_boat": "packet_steer_boat",
+                "craft_recipe_request": "packet_craft_recipe_request",
+                "abilities": "packet_abilities",
+                "block_dig": "packet_block_dig",
+                "entity_action": "packet_entity_action",
+                "steer_vehicle": "packet_steer_vehicle",
+                "displayed_recipe": "packet_displayed_recipe",
+                "recipe_book": "packet_recipe_book",
+                "resource_pack_receive": "packet_resource_pack_receive",
+                "held_item_slot": "packet_held_item_slot",
+                "set_creative_slot": "packet_set_creative_slot",
+                "update_jigsaw_block": "packet_update_jigsaw_block",
+                "update_sign": "packet_update_sign",
+                "arm_animation": "packet_arm_animation",
+                "spectate": "packet_spectate",
+                "block_place": "packet_block_place",
+                "use_item": "packet_use_item",
+                "advancement_tab": "packet_advancement_tab",
+                "pong": "packet_pong"
+              }
+            }
+          ]
+        }
+      ]
+    ]
+  },
+  "commonTypes": {
+    "varint": "native",
+    "varlong": "native",
+    "optvarint": "varint",
+    "pstring": "native",
+    "buffer": "native",
+    "u8": "native",
+    "u16": "native",
+    "u32": "native",
+    "u64": "native",
+    "i8": "native",
+    "i16": "native",
+    "i32": "native",
+    "i64": "native",
+    "bool": "native",
+    "f32": "native",
+    "f64": "native",
+    "UUID": "native",
+    "option": "native",
+    "entityMetadataLoop": "native",
+    "topBitSetTerminatedArray": "native",
+    "bitfield": "native",
+    "bitflags": "native",
+    "container": "native",
+    "switch": "native",
+    "void": "native",
+    "array": "native",
+    "restBuffer": "native",
+    "nbt": "native",
+    "optionalNbt": "native",
+    "ByteArray": ["buffer", { "countType": "varint" }],
+    "string": ["pstring", { "countType": "varint" }],
+    "vec3i16": [
+      "container",
+      [
+        { "name": "x", "type": "i16" },
+        { "name": "y", "type": "i16" },
+        { "name": "z", "type": "i16" }
+      ]
+    ],
+    "slot": [
+      "container",
+      [
+        { "name": "present", "type": "bool" },
+        {
+          "anon": true,
+          "type": [
+            "switch",
+            {
+              "compareTo": "present",
+              "fields": {
+                "false": "void",
+                "true": [
+                  "container",
+                  [
+                    { "name": "itemId", "type": "varint" },
+                    { "name": "itemCount", "type": "i8" },
+                    { "name": "nbtData", "type": "optionalNbt" }
+                  ]
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    ],
+    "particle": [
+      "container",
+      [
+        { "name": "particleId", "type": "varint" },
+        {
+          "name": "data",
+          "type": ["particleData", { "compareTo": "particleId" }]
+        }
+      ]
+    ],
+    "particleData": [
+      "switch",
+      {
+        "compareTo": "$compareTo",
+        "fields": {
+          "2": ["container", [{ "name": "blockState", "type": "varint" }]],
+          "3": ["container", [{ "name": "blockState", "type": "varint" }]],
+          "14": [
+            "container",
+            [
+              { "name": "red", "type": "f32" },
+              { "name": "green", "type": "f32" },
+              { "name": "blue", "type": "f32" },
+              { "name": "scale", "type": "f32" }
+            ]
+          ],
+          "15": [
+            "container",
+            [
+              { "name": "fromRed", "type": "f32" },
+              { "name": "fromGreen", "type": "f32" },
+              { "name": "fromBlue", "type": "f32" },
+              { "name": "scale", "type": "f32" },
+              { "name": "toRed", "type": "f32" },
+              { "name": "toGreen", "type": "f32" },
+              { "name": "toBlue", "type": "f32" }
+            ]
+          ],
+          "24": ["container", [{ "name": "blockState", "type": "varint" }]],
+          "35": ["container", [{ "name": "item", "type": "slot" }]],
+          "36": [
+            "container",
+            [
+              { "name": "origin", "type": "position" },
+              { "name": "positionType", "type": "string" },
+              {
+                "name": "destination",
+                "type": [
+                  "switch",
+                  {
+                    "compareTo": "positionType",
+                    "fields": {
+                      "minecraft:block": "position",
+                      "minecraft:entity": "varint"
+                    }
+                  }
+                ]
+              },
+              { "name": "ticks", "type": "varint" }
+            ]
+          ]
+        },
+        "default": "void"
+      }
+    ],
+    "ingredient": ["array", { "countType": "varint", "type": "slot" }],
+    "position": [
+      "bitfield",
+      [
+        { "name": "x", "size": 26, "signed": true },
+        { "name": "z", "size": 26, "signed": true },
+        { "name": "y", "size": 12, "signed": true }
+      ]
+    ],
+    "entityMetadataItem": [
+      "switch",
+      {
+        "compareTo": "$compareTo",
+        "fields": {
+          "0": "i8",
+          "1": "varint",
+          "2": "f32",
+          "3": "string",
+          "4": "string",
+          "5": ["option", "string"],
+          "6": "slot",
+          "7": "bool",
+          "8": [
+            "container",
+            [
+              { "name": "pitch", "type": "f32" },
+              { "name": "yaw", "type": "f32" },
+              { "name": "roll", "type": "f32" }
+            ]
+          ],
+          "9": "position",
+          "10": ["option", "position"],
+          "11": "varint",
+          "12": ["option", "UUID"],
+          "13": "varint",
+          "14": "nbt",
+          "15": "particle",
+          "16": [
+            "container",
+            [
+              { "name": "villagerType", "type": "varint" },
+              { "name": "villagerProfession", "type": "varint" },
+              { "name": "level", "type": "varint" }
+            ]
+          ],
+          "17": "optvarint",
+          "18": "varint"
+        }
+      }
+    ],
+    "entityMetadata": [
+      "entityMetadataLoop",
+      {
+        "endVal": 255,
+        "type": [
+          "container",
+          [
+            {
+              "anon": true,
+              "type": [
+                "container",
+                [
+                  { "name": "key", "type": "u8" },
+                  { "name": "type", "type": "varint" }
+                ]
+              ]
+            },
+            {
+              "name": "value",
+              "type": ["entityMetadataItem", { "compareTo": "type" }]
+            }
+          ]
+        ]
+      }
+    ],
+    "minecraft_smelting_format": [
+      "container",
+      [
+        { "name": "group", "type": "string" },
+        { "name": "ingredient", "type": "ingredient" },
+        { "name": "result", "type": "slot" },
+        { "name": "experience", "type": "f32" },
+        { "name": "cookTime", "type": "varint" }
+      ]
+    ],
+    "tags": [
+      "array",
+      {
+        "countType": "varint",
+        "type": [
+          "container",
+          [
+            { "name": "tagName", "type": "string" },
+            {
+              "name": "entries",
+              "type": ["array", { "countType": "varint", "type": "varint" }]
+            }
+          ]
+        ]
+      }
+    ],
+    "chunkBlockEntity": [
+      "container",
+      [
+        {
+          "anon": true,
+          "type": [
+            "bitfield",
+            [
+              { "name": "x", "size": 4, "signed": false },
+              { "name": "z", "size": 4, "signed": false }
+            ]
+          ]
+        },
+        { "name": "y", "type": "i16" },
+        { "name": "type", "type": "varint" },
+        { "name": "nbtData", "type": "optionalNbt" }
+      ]
+    ],
+    "command_node": [
+      "container",
+      [
+        {
+          "name": "flags",
+          "type": [
+            "bitfield",
+            [
+              { "name": "unused", "size": 3, "signed": false },
+              { "name": "has_custom_suggestions", "size": 1, "signed": false },
+              { "name": "has_redirect_node", "size": 1, "signed": false },
+              { "name": "has_command", "size": 1, "signed": false },
+              { "name": "command_node_type", "size": 2, "signed": false }
+            ]
+          ]
+        },
+        {
+          "name": "children",
+          "type": ["array", { "countType": "varint", "type": "varint" }]
+        },
+        {
+          "name": "redirectNode",
+          "type": [
+            "switch",
+            {
+              "compareTo": "flags/has_redirect_node",
+              "fields": { "1": "varint" },
+              "default": "void"
+            }
+          ]
+        },
+        {
+          "name": "extraNodeData",
+          "type": [
+            "switch",
+            {
+              "compareTo": "flags/command_node_type",
+              "fields": {
+                "0": "void",
+                "1": ["container", [{ "name": "name", "type": "string" }]],
+                "2": [
+                  "container",
+                  [
+                    { "name": "name", "type": "string" },
+                    { "name": "parser", "type": "string" },
+                    {
+                      "name": "properties",
+                      "type": [
+                        "switch",
+                        {
+                          "compareTo": "parser",
+                          "fields": {
+                            "brigadier:bool": "void",
+                            "brigadier:float": [
+                              "container",
+                              [
+                                {
+                                  "name": "flags",
+                                  "type": [
+                                    "bitfield",
+                                    [
+                                      {
+                                        "name": "unused",
+                                        "size": 6,
+                                        "signed": false
+                                      },
+                                      {
+                                        "name": "max_present",
+                                        "size": 1,
+                                        "signed": false
+                                      },
+                                      {
+                                        "name": "min_present",
+                                        "size": 1,
+                                        "signed": false
+                                      }
+                                    ]
+                                  ]
+                                },
+                                {
+                                  "name": "min",
+                                  "type": [
+                                    "switch",
+                                    {
+                                      "compareTo": "flags/min_present",
+                                      "fields": { "1": "f32" },
+                                      "default": "void"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "name": "max",
+                                  "type": [
+                                    "switch",
+                                    {
+                                      "compareTo": "flags/max_present",
+                                      "fields": { "1": "f32" },
+                                      "default": "void"
+                                    }
+                                  ]
+                                }
+                              ]
+                            ],
+                            "brigadier:double": [
+                              "container",
+                              [
+                                {
+                                  "name": "flags",
+                                  "type": [
+                                    "bitfield",
+                                    [
+                                      {
+                                        "name": "unused",
+                                        "size": 6,
+                                        "signed": false
+                                      },
+                                      {
+                                        "name": "max_present",
+                                        "size": 1,
+                                        "signed": false
+                                      },
+                                      {
+                                        "name": "min_present",
+                                        "size": 1,
+                                        "signed": false
+                                      }
+                                    ]
+                                  ]
+                                },
+                                {
+                                  "name": "min",
+                                  "type": [
+                                    "switch",
+                                    {
+                                      "compareTo": "flags/min_present",
+                                      "fields": { "1": "f64" },
+                                      "default": "void"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "name": "max",
+                                  "type": [
+                                    "switch",
+                                    {
+                                      "compareTo": "flags/max_present",
+                                      "fields": { "1": "f64" },
+                                      "default": "void"
+                                    }
+                                  ]
+                                }
+                              ]
+                            ],
+                            "brigadier:integer": [
+                              "container",
+                              [
+                                {
+                                  "name": "flags",
+                                  "type": [
+                                    "bitfield",
+                                    [
+                                      {
+                                        "name": "unused",
+                                        "size": 6,
+                                        "signed": false
+                                      },
+                                      {
+                                        "name": "max_present",
+                                        "size": 1,
+                                        "signed": false
+                                      },
+                                      {
+                                        "name": "min_present",
+                                        "size": 1,
+                                        "signed": false
+                                      }
+                                    ]
+                                  ]
+                                },
+                                {
+                                  "name": "min",
+                                  "type": [
+                                    "switch",
+                                    {
+                                      "compareTo": "flags/min_present",
+                                      "fields": { "1": "i32" },
+                                      "default": "void"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "name": "max",
+                                  "type": [
+                                    "switch",
+                                    {
+                                      "compareTo": "flags/max_present",
+                                      "fields": { "1": "i32" },
+                                      "default": "void"
+                                    }
+                                  ]
+                                }
+                              ]
+                            ],
+                            "brigadier:long": [
+                              "container",
+                              [
+                                {
+                                  "name": "flags",
+                                  "type": [
+                                    "bitfield",
+                                    [
+                                      {
+                                        "name": "unused",
+                                        "size": 6,
+                                        "signed": false
+                                      },
+                                      {
+                                        "name": "max_present",
+                                        "size": 1,
+                                        "signed": false
+                                      },
+                                      {
+                                        "name": "min_present",
+                                        "size": 1,
+                                        "signed": false
+                                      }
+                                    ]
+                                  ]
+                                },
+                                {
+                                  "name": "min",
+                                  "type": [
+                                    "switch",
+                                    {
+                                      "compareTo": "flags/min_present",
+                                      "fields": { "1": "i64" },
+                                      "default": "void"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "name": "max",
+                                  "type": [
+                                    "switch",
+                                    {
+                                      "compareTo": "flags/max_present",
+                                      "fields": { "1": "i64" },
+                                      "default": "void"
+                                    }
+                                  ]
+                                }
+                              ]
+                            ],
+                            "brigadier:string": [
+                              "mapper",
+                              {
+                                "type": "varint",
+                                "mappings": {
+                                  "0": "SINGLE_WORD",
+                                  "1": "QUOTABLE_PHRASE",
+                                  "2": "GREEDY_PHRASE"
+                                }
+                              }
+                            ],
+                            "minecraft:entity": [
+                              "bitfield",
+                              [
+                                {
+                                  "name": "unused",
+                                  "size": 6,
+                                  "signed": false
+                                },
+                                {
+                                  "name": "onlyAllowPlayers",
+                                  "size": 1,
+                                  "signed": false
+                                },
+                                {
+                                  "name": "onlyAllowEntities",
+                                  "size": 1,
+                                  "signed": false
+                                }
+                              ]
+                            ],
+                            "minecraft:game_profile": "void",
+                            "minecraft:block_pos": "void",
+                            "minecraft:column_pos": "void",
+                            "minecraft:vec3": "void",
+                            "minecraft:vec2": "void",
+                            "minecraft:block_state": "void",
+                            "minecraft:block_predicate": "void",
+                            "minecraft:item_stack": "void",
+                            "minecraft:item_predicate": "void",
+                            "minecraft:color": "void",
+                            "minecraft:component": "void",
+                            "minecraft:message": "void",
+                            "minecraft:nbt": "void",
+                            "minecraft:nbt_path": "void",
+                            "minecraft:objective": "void",
+                            "minecraft:objective_criteria": "void",
+                            "minecraft:operation": "void",
+                            "minecraft:particle": "void",
+                            "minecraft:angle": "void",
+                            "minecraft:rotation": "void",
+                            "minecraft:scoreboard_slot": "void",
+                            "minecraft:score_holder": [
+                              "bitfield",
+                              [
+                                {
+                                  "name": "unused",
+                                  "size": 7,
+                                  "signed": false
+                                },
+                                {
+                                  "name": "allowMultiple",
+                                  "size": 1,
+                                  "signed": false
+                                }
+                              ]
+                            ],
+                            "minecraft:swizzle": "void",
+                            "minecraft:team": "void",
+                            "minecraft:item_slot": "void",
+                            "minecraft:resource_location": "void",
+                            "minecraft:mob_effect": "void",
+                            "minecraft:function": "void",
+                            "minecraft:entity_anchor": "void",
+                            "minecraft:range": [
+                              "container",
+                              [{ "name": "allowDecimals", "type": "bool" }]
+                            ],
+                            "minecraft:int_range": "void",
+                            "minecraft:float_range": "void",
+                            "minecraft:item_enchantment": "void",
+                            "minecraft:entity_summon": "void",
+                            "minecraft:dimension": "void",
+                            "minecraft:nbt_compound_tag": "void",
+                            "minecraft:time": "void",
+                            "minecraft:resource_or_tag": [
+                              "container",
+                              [{ "name": "registry", "type": "string" }]
+                            ],
+                            "minecraft:resource": [
+                              "container",
+                              [{ "name": "registry", "type": "string" }]
+                            ],
+                            "minecraft:uuid": "void"
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "name": "suggestionType",
+                      "type": [
+                        "switch",
+                        {
+                          "compareTo": "../flags/has_custom_suggestions",
+                          "fields": { "1": "string" },
+                          "default": "void"
+                        }
+                      ]
+                    }
+                  ]
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    ]
+  }
+}

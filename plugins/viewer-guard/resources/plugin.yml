@@ -1,0 +1,39 @@
+name: RLCraftViewerGuard
+version: 0.6.0
+main: dev.rlcraft.viewer.ViewerGuard
+api-version: '1.18'
+description: Protected admin spectators for local Minecraft agent training.
+commands:
+  rlcraftrules:
+    description: Apply/release temporary experiment rules from the control console.
+    usage: /rlcraftrules <request-id> <run-id> <encoded-rules>
+    permission: rlcraft.agent.setup
+  rlcrafthudsync:
+    description: Update viewer-only training displays from the control console.
+    usage: /rlcrafthudsync <encoded-state>
+    permission: rlcraft.agent.setup
+  rlcrafthud:
+    description: Choose or hide your personal training HUD.
+    usage: /rlcrafthud auto|on|next|off|<run-id-prefix>
+    permission: rlcraft.viewer.status
+  rlcraftarena:
+    description: Prepare a bounded training arena from the console.
+    usage: /rlcraftarena <request-id> <run-id> <encoded-layout>
+    permission: rlcraft.agent.setup
+  rlcraftarenaspawn:
+    description: Spawn an owned agent inside its prepared arena from the console.
+    usage: /rlcraftarenaspawn <request-id> <run-id> <agent> <index>
+    permission: rlcraft.agent.setup
+  rlcraftsetup:
+    description: Apply an acknowledged setup to a named training agent from the console.
+    usage: /rlcraftsetup <request-id> <agent> <encoded-setup>
+    permission: rlcraft.agent.setup
+  viewerguard:
+    description: Show protection status for an online player.
+    usage: /viewerguard <player>
+    permission: rlcraft.viewer.status
+permissions:
+  rlcraft.agent.setup:
+    default: op
+  rlcraft.viewer.status:
+    default: op

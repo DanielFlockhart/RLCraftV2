@@ -1,0 +1,5 @@
+{
+  "required": true, "minVersion": "0.8", "package": "dev.rlcraft.agent.mixin",
+  "compatibilityLevel": "JAVA_17", "client": ["MinecraftClientMixin", "ClientPlayNetworkHandlerMixin"],
+  "injectors": { "defaultRequire": 1 }
+}

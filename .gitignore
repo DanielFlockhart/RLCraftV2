@@ -1,0 +1,12 @@
+node_modules/
+.next/
+dist/
+/data/
+/runtime/
+deploy/cloud.state/
+.env
+*.tsbuildinfo
+*.log
+__pycache__/
+clients/fabric-agent/.gradle/
+clients/fabric-agent/build/

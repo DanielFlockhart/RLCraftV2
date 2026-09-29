@@ -1,0 +1,506 @@
+{
+  "schemaVersion": 1,
+  "scope": "Player connection and client state only. No server-only instrumentation.",
+  "channels": [
+    {
+      "id": "self.identity",
+      "label": "Identity",
+      "source": "client state",
+      "fields": ["username", "uuid", "id", "version", "protocolVersion"],
+      "description": "",
+      "defaultIntervalMs": 100,
+      "defaultEnabled": true
+    },
+    {
+      "id": "self.pose",
+      "label": "Position and orientation",
+      "source": "client state",
+      "fields": [
+        "position",
+        "velocity",
+        "yaw",
+        "pitch",
+        "headYaw",
+        "height",
+        "width",
+        "eyeHeight",
+        "onGround",
+        "isValid"
+      ],
+      "description": "",
+      "defaultIntervalMs": 100,
+      "defaultEnabled": true
+    },
+    {
+      "id": "self.vitals",
+      "label": "Health and hunger",
+      "source": "client-received",
+      "fields": ["health", "food", "saturation", "oxygen", "alive"],
+      "description": "Saturation and oxygen are client-held values; no server exhaustion or hidden damage state.",
+      "defaultIntervalMs": 100,
+      "defaultEnabled": true
+    },
+    {
+      "id": "self.experience",
+      "label": "Experience",
+      "source": "client-received",
+      "fields": ["level", "points", "progress"],
+      "description": "",
+      "defaultIntervalMs": 100,
+      "defaultEnabled": true
+    },
+    {
+      "id": "self.effects",
+      "label": "Active effects",
+      "source": "client-received",
+      "fields": ["effects", "metadata"],
+      "description": "",
+      "defaultIntervalMs": 100,
+      "defaultEnabled": true
+    },
+    {
+      "id": "self.attributes",
+      "label": "Attributes",
+      "source": "client-received",
+      "fields": ["attributes"],
+      "description": "Only attributes received by this connection; unknown values are not inferred.",
+      "defaultIntervalMs": 100,
+      "defaultEnabled": true
+    },
+    {
+      "id": "self.physics",
+      "label": "Locally simulated movement",
+      "source": "local simulation",
+      "fields": [
+        "isInWater",
+        "isInLava",
+        "isInWeb",
+        "isCollidedHorizontally",
+        "isCollidedVertically",
+        "jumpTicks",
+        "jumpQueued",
+        "elytraFlying",
+        "fireworkRocketDuration",
+        "physicsEnabled"
+      ],
+      "description": "Client physics estimates, not authoritative server internals.",
+      "defaultIntervalMs": 100,
+      "defaultEnabled": true
+    },
+    {
+      "id": "self.controls",
+      "label": "Current controls",
+      "source": "local state",
+      "fields": ["forward", "back", "left", "right", "jump", "sprint", "sneak"],
+      "description": "",
+      "defaultIntervalMs": 100,
+      "defaultEnabled": true
+    },
+    {
+      "id": "self.inventory",
+      "label": "Inventory and equipment",
+      "source": "client-received",
+      "fields": [
+        "slots",
+        "heldItem",
+        "quickBarSlot",
+        "equipment",
+        "usingHeldItem"
+      ],
+      "description": "Slot indices use Minecraft window coordinates; item details include client-received NBT, durability and enchantments.",
+      "defaultIntervalMs": 100,
+      "defaultEnabled": true
+    },
+    {
+      "id": "self.digging",
+      "label": "Digging state and target",
+      "source": "local state",
+      "fields": ["target", "canDig", "estimatedMs"],
+      "description": "",
+      "defaultIntervalMs": 100,
+      "defaultEnabled": true
+    },
+    {
+      "id": "self.abilities",
+      "label": "Player abilities",
+      "source": "client-received",
+      "fields": ["flags", "flyingSpeed", "walkingSpeed"],
+      "description": "",
+      "defaultIntervalMs": 100,
+      "defaultEnabled": true
+    },
+    {
+      "id": "self.cooldowns",
+      "label": "Item cooldowns",
+      "source": "client-received",
+      "fields": ["items"],
+      "description": "Packet durations tracked against actual client world ticks; never server-only attack cooldown.",
+      "defaultIntervalMs": 100,
+      "defaultEnabled": true
+    },
+    {
+      "id": "world.game",
+      "label": "World and connection",
+      "source": "client-received",
+      "fields": [
+        "dimension",
+        "gameMode",
+        "difficulty",
+        "hardcore",
+        "levelType",
+        "maxPlayers",
+        "serverBrand"
+      ],
+      "description": "",
+      "defaultIntervalMs": 100,
+      "defaultEnabled": true
+    },
+    {
+      "id": "world.time",
+      "label": "World time",
+      "source": "client-received",
+      "fields": [
+        "age",
+        "time",
+        "timeOfDay",
+        "day",
+        "isDay",
+        "moonPhase",
+        "doDaylightCycle",
+        "bigAge",
+        "bigTime"
+      ],
+      "description": "",
+      "defaultIntervalMs": 100,
+      "defaultEnabled": true
+    },
+    {
+      "id": "world.weather",
+      "label": "Weather",
+      "source": "client-received",
+      "fields": ["raining", "rainState", "thunderState"],
+      "description": "",
+      "defaultIntervalMs": 100,
+      "defaultEnabled": true
+    },
+    {
+      "id": "world.spawn",
+      "label": "Spawn and compass target",
+      "source": "client-received",
+      "fields": ["position"],
+      "description": "",
+      "defaultIntervalMs": 100,
+      "defaultEnabled": true
+    },
+    {
+      "id": "world.border",
+      "label": "World border",
+      "source": "client-received",
+      "fields": [
+        "initialize",
+        "center",
+        "size",
+        "lerp",
+        "warningDistance",
+        "warningTime"
+      ],
+      "description": "",
+      "defaultIntervalMs": 100,
+      "defaultEnabled": true
+    },
+    {
+      "id": "world.blocks",
+      "label": "Nearby client-known blocks",
+      "source": "client world cache",
+      "fields": ["blocks", "unknownCount", "radius"],
+      "description": "Includes occluded but client-received terrain, as a normal client cache does. Unloaded cells are unknown. No world files are read.",
+      "defaultIntervalMs": 500,
+      "defaultEnabled": true
+    },
+    {
+      "id": "world.chunks",
+      "label": "Loaded chunk coverage",
+      "source": "client world cache",
+      "fields": ["columns"],
+      "description": "Coverage metadata only. Full incoming chunk payloads are available through protocol.packets.",
+      "defaultIntervalMs": 1000,
+      "defaultEnabled": true
+    },
+    {
+      "id": "world.blockEntities",
+      "label": "Client-known block entity updates",
+      "source": "client-received",
+      "fields": ["entries"],
+      "description": "Only server-sent NBT; unopened container inventories are not queried.",
+      "defaultIntervalMs": 500,
+      "defaultEnabled": true
+    },
+    {
+      "id": "world.maps",
+      "label": "Received map pixels and icons",
+      "source": "client-received",
+      "fields": ["maps"],
+      "description": "Map patches retain their x/y offsets and sequence; never silently substitute a complete map.",
+      "defaultIntervalMs": 500,
+      "defaultEnabled": true
+    },
+    {
+      "id": "entities.visible",
+      "label": "Line-of-sight entities",
+      "source": "visible geometry",
+      "fields": ["entities"],
+      "description": "Only client-received entities with unobstructed sampled sight rays; entity geometry is approximate and marked.",
+      "defaultIntervalMs": 100,
+      "defaultEnabled": true
+    },
+    {
+      "id": "players.tab",
+      "label": "Player list",
+      "source": "client-received",
+      "fields": ["players", "header", "footer"],
+      "description": "Tab-list data delivered by the server. Protected viewer players are excluded.",
+      "defaultIntervalMs": 500,
+      "defaultEnabled": true
+    },
+    {
+      "id": "ui.window",
+      "label": "Open container or trading window",
+      "source": "client-received",
+      "fields": [
+        "id",
+        "type",
+        "title",
+        "slots",
+        "inventoryStart",
+        "inventoryEnd",
+        "properties",
+        "trades"
+      ],
+      "description": "Only windows actually opened by this agent.",
+      "defaultIntervalMs": 100,
+      "defaultEnabled": true
+    },
+    {
+      "id": "ui.scoreboards",
+      "label": "Scoreboards",
+      "source": "client-received",
+      "fields": ["objectives", "positions", "teams"],
+      "description": "",
+      "defaultIntervalMs": 100,
+      "defaultEnabled": true
+    },
+    {
+      "id": "ui.bossBars",
+      "label": "Boss bars",
+      "source": "client-received",
+      "fields": ["bars"],
+      "description": "",
+      "defaultIntervalMs": 100,
+      "defaultEnabled": true
+    },
+    {
+      "id": "ui.titles",
+      "label": "Titles and action bars",
+      "source": "client-received",
+      "fields": ["title", "subtitle", "timing", "actionBar"],
+      "description": "",
+      "defaultIntervalMs": 100,
+      "defaultEnabled": true
+    },
+    {
+      "id": "ui.combat",
+      "label": "Combat and death notifications",
+      "source": "client-received",
+      "fields": ["enter", "end", "death"],
+      "description": "",
+      "defaultIntervalMs": 100,
+      "defaultEnabled": true
+    },
+    {
+      "id": "knowledge.recipes",
+      "label": "Recipes and recipe book",
+      "source": "client-received",
+      "fields": ["declarations", "book"],
+      "description": "Use actual server declarations and unlocks, not all theoretical crafting recipes.",
+      "defaultIntervalMs": 1000,
+      "defaultEnabled": true
+    },
+    {
+      "id": "knowledge.advancements",
+      "label": "Advancement definitions and progress",
+      "source": "client-received",
+      "fields": ["updates", "selectedTab"],
+      "description": "Only data sent to the client; this does not request privileged advancement state.",
+      "defaultIntervalMs": 1000,
+      "defaultEnabled": true
+    },
+    {
+      "id": "knowledge.statistics",
+      "label": "Statistics",
+      "source": "client-received",
+      "fields": ["values"],
+      "description": "Available when the server sends statistics, normally on opening that UI. No privileged queries.",
+      "defaultIntervalMs": 1000,
+      "defaultEnabled": true
+    },
+    {
+      "id": "knowledge.commands",
+      "label": "Command suggestions",
+      "source": "client-received",
+      "fields": ["tree", "suggestions"],
+      "description": "Server-provided accessible command tree and tab-completion responses only.",
+      "defaultIntervalMs": 1000,
+      "defaultEnabled": true
+    },
+    {
+      "id": "knowledge.tags",
+      "label": "Registry tags",
+      "source": "client-received",
+      "fields": ["tags"],
+      "description": "",
+      "defaultIntervalMs": 1000,
+      "defaultEnabled": true
+    },
+    {
+      "id": "knowledge.resourcePack",
+      "label": "Resource pack offer",
+      "source": "client-received",
+      "fields": ["offer"],
+      "description": "Offers are recorded; untrusted URLs are never fetched automatically.",
+      "defaultIntervalMs": 1000,
+      "defaultEnabled": true
+    },
+    {
+      "id": "events.sounds",
+      "label": "Heard sound events",
+      "source": "client-received events",
+      "fields": ["events"],
+      "description": "Includes named, numeric, entity-attached, note/block/world sounds and stop commands. Raw protocol preserves exact fields.",
+      "defaultIntervalMs": 0,
+      "defaultEnabled": true
+    },
+    {
+      "id": "events.particles",
+      "label": "Visible particle events",
+      "source": "client-received events",
+      "fields": ["events"],
+      "description": "",
+      "defaultIntervalMs": 0,
+      "defaultEnabled": true
+    },
+    {
+      "id": "events.entities",
+      "label": "Entity and combat events",
+      "source": "client-received events",
+      "fields": ["events"],
+      "description": "",
+      "defaultIntervalMs": 0,
+      "defaultEnabled": true
+    },
+    {
+      "id": "events.blocks",
+      "label": "Block changes and animations",
+      "source": "client-received events",
+      "fields": ["events"],
+      "description": "",
+      "defaultIntervalMs": 0,
+      "defaultEnabled": true
+    },
+    {
+      "id": "events.messages",
+      "label": "Chat and UI messages",
+      "source": "client-received events",
+      "fields": ["events"],
+      "description": "Includes messages addressed to this connection and action bars.",
+      "defaultIntervalMs": 0,
+      "defaultEnabled": true
+    },
+    {
+      "id": "events.inventory",
+      "label": "Inventory and window events",
+      "source": "client-received events",
+      "fields": ["events"],
+      "description": "",
+      "defaultIntervalMs": 0,
+      "defaultEnabled": true
+    },
+    {
+      "id": "events.lifecycle",
+      "label": "Connection, movement and lifecycle",
+      "source": "client/local events",
+      "fields": ["events"],
+      "description": "",
+      "defaultIntervalMs": 0,
+      "defaultEnabled": true
+    },
+    {
+      "id": "vision.geometry",
+      "label": "First-person depth and semantic image",
+      "source": "geometry projection",
+      "fields": [
+        "width",
+        "height",
+        "fov",
+        "distance",
+        "origin",
+        "yaw",
+        "pitch",
+        "depth",
+        "stateIds",
+        "entityIds",
+        "valid",
+        "legend"
+      ],
+      "description": "CPU projection from received collision shapes and entity bounds. Not a vanilla RGB screenshot; transparent surfaces and non-collision decorations are approximate.",
+      "defaultIntervalMs": 500,
+      "defaultEnabled": true
+    },
+    {
+      "id": "vision.rgb",
+      "label": "Rendered RGB capture",
+      "source": "rendered client capture",
+      "fields": ["frame"],
+      "description": "Actual first-person pixels from the managed Fabric client framebuffer, or an authenticated external producer for other backends. Mineflayer does not launch a renderer itself.",
+      "defaultIntervalMs": 100,
+      "defaultEnabled": false
+    },
+    {
+      "id": "audio.pcm",
+      "label": "Decoded server-sound PCM",
+      "source": "server-sound playback",
+      "fields": [
+        "sampleRate",
+        "channels",
+        "encoding",
+        "data",
+        "from",
+        "to",
+        "pending",
+        "missing",
+        "late",
+        "voices"
+      ],
+      "description": "Actual vanilla Ogg samples mixed from received sound events. Omits client-only ambience/music/footsteps generated locally and resource-pack overrides; use audio.capture for exact client output.",
+      "defaultIntervalMs": 100,
+      "defaultEnabled": false
+    },
+    {
+      "id": "audio.capture",
+      "label": "Actual rendered client audio",
+      "source": "external client capture",
+      "fields": ["frame"],
+      "description": "PCM from a real client audio producer; unavailable until fresh frames are supplied.",
+      "defaultIntervalMs": 100,
+      "defaultEnabled": false
+    },
+    {
+      "id": "protocol.packets",
+      "label": "Every incoming PLAY packet",
+      "source": "client protocol",
+      "fields": ["events", "counts", "definitionsVersion"],
+      "description": "Opt-in high-volume catch-all. Preserves all decoded PLAY fields, byte arrays as base64, 64-bit values as tagged integers. Excludes login/auth traffic; bounded loss is explicitly reported.",
+      "defaultIntervalMs": 0,
+      "defaultEnabled": false
+    }
+  ]
+}

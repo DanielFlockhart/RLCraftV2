@@ -1,0 +1,14 @@
+plugins { id 'fabric-loom' version '1.6.12' }
+version = '0.1.0'
+group = 'dev.rlcraft'
+base { archivesName = 'rlcraft-fabric-agent' }
+layout.buildDirectory = file(project.findProperty('rlcraftBuildDir') ?: 'build')
+repositories { mavenCentral() }
+dependencies {
+    minecraft 'com.mojang:minecraft:1.18.1'
+    mappings 'net.fabricmc:yarn:1.18.1+build.22:v2'
+    modImplementation 'net.fabricmc:fabric-loader:0.16.14'
+}
+java { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
+tasks.withType(JavaCompile).configureEach { options.release = 17; options.encoding = 'UTF-8' }
+processResources { from('../../packages/core/src/progression-catalog.json') }

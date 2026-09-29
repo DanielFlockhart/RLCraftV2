@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1, "id": "rlcraft_agent", "version": "0.1.0",
+  "name": "RLCraft Agent Client", "environment": "client",
+  "entrypoints": { "client": ["dev.rlcraft.agent.AgentClient"] },
+  "mixins": ["rlcraft-agent.mixins.json"],
+  "depends": { "fabricloader": ">=0.16.14", "minecraft": "1.18.1", "java": ">=17" }
+}

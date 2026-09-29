@@ -1,0 +1,1421 @@
+{
+  "schemaVersion": 1,
+  "minecraftVersion": "1.18.1",
+  "goal": "Defeat the Ender Dragon and use the End exit portal; distinguish kill credit, win-game event and return.",
+  "scope": "Vanilla survival completion on the configured Paper 1.18.1 baseline. No commands, glitches or creative shortcuts are assumed; routes and preparation are not universal prerequisites. Checks are historical observed facts, not a claim of unaided accomplishment.",
+  "groups": [
+    { "id": "foundation", "title": "1. Overworld foundations" },
+    { "id": "equipment", "title": "2. Food and equipment" },
+    { "id": "portal", "title": "3. Nether access: choose a route" },
+    { "id": "nether", "title": "4. Fortress and blaze powder" },
+    { "id": "pearls", "title": "5. Ender pearls: choose a route" },
+    { "id": "stronghold", "title": "6. Eyes, stronghold and End portal" },
+    { "id": "dragon", "title": "7. The End and dragon fight" },
+    { "id": "finish", "title": "8. Exit portal and completion" },
+    { "id": "postgame", "title": "9. Optional postgame" }
+  ],
+  "steps": [
+    {
+      "id": "wood",
+      "group": "foundation",
+      "title": "Obtain wood",
+      "requirement": "route",
+      "instructions": [
+        "Find a reachable tree or another legal wood source.",
+        "Break a log with the attack control, complete mining, and collect the drop."
+      ],
+      "items": "Logs/stems or reusable found planks.",
+      "minimum": "A normal self-crafted tool route starts with wood; exact total depends on selected tools/fuel.",
+      "alternatives": "Loot/village workstations or existing equipment can skip wood gathering.",
+      "rules": [
+        {
+          "kind": "inventory",
+          "items": [
+            "oak_log",
+            "spruce_log",
+            "birch_log",
+            "jungle_log",
+            "acacia_log",
+            "dark_oak_log",
+            "oak_wood",
+            "spruce_wood",
+            "birch_wood",
+            "jungle_wood",
+            "acacia_wood",
+            "dark_oak_wood",
+            "crimson_stem",
+            "warped_stem"
+          ],
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "planks",
+      "group": "foundation",
+      "title": "Obtain planks",
+      "requirement": "route",
+      "instructions": [
+        "Put a log/stem into the personal 2×2 crafting grid.",
+        "Take the output; one ordinary log/stem produces four matching planks."
+      ],
+      "items": "1 log/stem → 4 planks.",
+      "minimum": "4 planks for a new crafting table; other recipes consume more.",
+      "alternatives": "Found/looted planks also satisfy possession, but do not prove crafting.",
+      "rules": [
+        {
+          "kind": "inventory",
+          "items": [
+            "oak_planks",
+            "spruce_planks",
+            "birch_planks",
+            "jungle_planks",
+            "acacia_planks",
+            "dark_oak_planks",
+            "crimson_planks",
+            "warped_planks"
+          ],
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "craft-planks",
+      "group": "foundation",
+      "title": "Craft planks",
+      "requirement": "route",
+      "instructions": [
+        "Select a valid log-to-planks recipe, take the result, and clear unused grid items."
+      ],
+      "items": "1 log/stem per batch of 4 planks.",
+      "minimum": "One batch when crafting planks yourself.",
+      "alternatives": "Skip if using found planks.",
+      "rules": [
+        {
+          "kind": "statistic",
+          "category": "crafted",
+          "names": [
+            "oak_planks",
+            "spruce_planks",
+            "birch_planks",
+            "jungle_planks",
+            "acacia_planks",
+            "dark_oak_planks",
+            "crimson_planks",
+            "warped_planks"
+          ],
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "table",
+      "group": "foundation",
+      "title": "Obtain a crafting table",
+      "requirement": "route",
+      "instructions": [
+        "Arrange four planks in the 2×2 inventory grid.",
+        "Take the crafting table, or collect an existing one."
+      ],
+      "items": "4 planks → 1 crafting table.",
+      "minimum": "1 reusable table for recipes needing 3×3.",
+      "alternatives": "An accessible village/existing table can replace a carried one.",
+      "rules": [
+        { "kind": "inventory", "items": ["crafting_table"], "count": 1 }
+      ]
+    },
+    {
+      "id": "use-table",
+      "group": "foundation",
+      "title": "Open a crafting table",
+      "requirement": "route",
+      "instructions": [
+        "Place or find a reachable table.",
+        "Use it to open the 3×3 crafting menu."
+      ],
+      "items": "1 accessible crafting table; placement does not consume it permanently.",
+      "minimum": "No new table if one already exists.",
+      "alternatives": "2×2 recipes such as eyes do not require a table.",
+      "rules": [{ "kind": "window", "type": "crafting" }]
+    },
+    {
+      "id": "sticks",
+      "group": "foundation",
+      "title": "Obtain sticks",
+      "requirement": "route",
+      "instructions": [
+        "Place two planks vertically; collect four sticks.",
+        "Retain unused sticks for later tools."
+      ],
+      "items": "2 planks → 4 sticks.",
+      "minimum": "2 sticks per pickaxe; 1 per sword; 3 per bow.",
+      "alternatives": "Dead bushes, leaves/loot or found tools can replace crafting.",
+      "rules": [{ "kind": "inventory", "items": ["stick"], "count": 1 }]
+    },
+    {
+      "id": "wood-pick",
+      "group": "foundation",
+      "title": "Obtain a wooden pickaxe",
+      "requirement": "route",
+      "instructions": [
+        "Use three planks across the top and two sticks down the center.",
+        "Take and equip the wooden pickaxe."
+      ],
+      "items": "3 planks + 2 sticks → 1 wooden pickaxe.",
+      "minimum": "1 for the conventional stone-tool bootstrap.",
+      "alternatives": "A found stone-or-better pickaxe skips this tier.",
+      "rules": [
+        { "kind": "inventory", "items": ["wooden_pickaxe"], "count": 1 }
+      ]
+    },
+    {
+      "id": "mine-stone",
+      "group": "foundation",
+      "title": "Mine stone-tier material",
+      "requirement": "route",
+      "instructions": [
+        "Find exposed stone/cobblestone or deepslate.",
+        "Mine with a sufficient pickaxe and collect cobblestone/cobbled deepslate."
+      ],
+      "items": "Wooden-or-better pickaxe; suitable block.",
+      "minimum": "3 drops for a stone pickaxe; 8 more for a furnace.",
+      "alternatives": "Loot stone tools or find a furnace instead.",
+      "rules": [
+        {
+          "kind": "statistic",
+          "category": "mined",
+          "names": ["stone", "cobblestone", "deepslate", "cobbled_deepslate"],
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "stone-material",
+      "group": "foundation",
+      "title": "Hold 11 stone-tier blocks",
+      "requirement": "route",
+      "instructions": [
+        "Collect enough material for a stone pickaxe and furnace."
+      ],
+      "items": "11 cobblestone/cobbled deepslate, usable by the corresponding recipes.",
+      "minimum": "3 + 8 = 11 for these two crafted objects.",
+      "alternatives": "Possession threshold is a supply check; spent materials may mean this checkpoint is never observed even if later stages succeed.",
+      "rules": [
+        {
+          "kind": "inventory",
+          "items": ["cobblestone", "cobbled_deepslate"],
+          "count": 11
+        }
+      ]
+    },
+    {
+      "id": "stone-pick",
+      "group": "foundation",
+      "title": "Obtain a stone pickaxe",
+      "requirement": "route",
+      "instructions": [
+        "Craft with three cobblestone/cobbled deepslate and two sticks, or obtain an equivalent higher-tier tool.",
+        "Use a stone-or-better pickaxe for iron ore."
+      ],
+      "items": "3 stone-tier blocks + 2 sticks.",
+      "minimum": "1 stone pickaxe for the conventional iron route.",
+      "alternatives": "Found higher-tier pickaxe bypasses this exact tier.",
+      "rules": [
+        { "kind": "inventory", "items": ["stone_pickaxe"], "count": 1 },
+        { "kind": "advancement", "id": "minecraft:story/upgrade_tools" }
+      ]
+    },
+    {
+      "id": "furnace",
+      "group": "foundation",
+      "title": "Obtain a furnace",
+      "requirement": "route",
+      "instructions": [
+        "Arrange eight cobblestone/cobbled deepslate around an empty center.",
+        "Take it and place it near a fuel/ore supply, or use an existing furnace."
+      ],
+      "items": "8 stone-tier blocks → 1 furnace.",
+      "minimum": "1 reusable furnace for smelting route.",
+      "alternatives": "Found furnace or looted/traded iron ingots can skip crafting.",
+      "rules": [{ "kind": "inventory", "items": ["furnace"], "count": 1 }]
+    },
+    {
+      "id": "open-furnace",
+      "group": "foundation",
+      "title": "Open a furnace",
+      "requirement": "route",
+      "instructions": [
+        "Use a reachable furnace to access input, fuel and output slots."
+      ],
+      "items": "Accessible furnace.",
+      "minimum": "No extra material when using existing station.",
+      "alternatives": "Other accepted iron-smelting station or found ingots can replace it.",
+      "rules": [{ "kind": "window", "type": "furnace" }]
+    },
+    {
+      "id": "fuel",
+      "group": "foundation",
+      "title": "Obtain smelting fuel",
+      "requirement": "route",
+      "instructions": [
+        "Mine coal or prepare charcoal/other furnace fuel.",
+        "Put enough fuel in the fuel slot to smelt selected ore."
+      ],
+      "items": "Coal/charcoal, ordinary wood or other valid fuel.",
+      "minimum": "1 coal/charcoal smelts up to 8 items; selected bucket+igniter route needs 4 ingots.",
+      "alternatives": "Nether wood is not ordinary wood fuel; do not assume every plank/log item burns. Looted ingots bypass smelting.",
+      "rules": [
+        { "kind": "inventory", "items": ["coal", "charcoal"], "count": 1 }
+      ]
+    },
+    {
+      "id": "raw-iron",
+      "group": "foundation",
+      "title": "Obtain raw iron",
+      "requirement": "route",
+      "instructions": [
+        "Mine iron/deepslate iron ore with a stone-or-better pickaxe.",
+        "Collect raw iron drops."
+      ],
+      "items": "Stone-or-better pickaxe and ore.",
+      "minimum": "4 raw iron for one crafted bucket plus flint and steel.",
+      "alternatives": "Found ingots, golem drops or other legal iron sources bypass raw ore.",
+      "rules": [{ "kind": "inventory", "items": ["raw_iron"], "count": 1 }]
+    },
+    {
+      "id": "iron",
+      "group": "foundation",
+      "title": "Obtain four iron ingots",
+      "requirement": "route",
+      "instructions": [
+        "Place raw iron/ore in furnace input and fuel in fuel slot.",
+        "Wait for processing, collect ingots, and reserve three for the bucket and one for the igniter."
+      ],
+      "items": "4 iron ingots; ore/fuel if smelting.",
+      "minimum": "4 for this chosen bucket-cast/igniter route; not a universal game minimum.",
+      "alternatives": "Found buckets/igniter or alternate ignition can lower required ingots.",
+      "rules": [{ "kind": "inventory", "items": ["iron_ingot"], "count": 4 }]
+    },
+    {
+      "id": "food",
+      "group": "equipment",
+      "title": "Obtain food",
+      "requirement": "preparation",
+      "instructions": [
+        "Gather, hunt, farm or loot edible items.",
+        "Cook applicable foods or use a safe edible source; keep a travel supply."
+      ],
+      "items": "Edible food; amount depends on travel, damage and difficulty.",
+      "minimum": "No fixed universal count; food is practical preparation, not an End-portal ingredient.",
+      "alternatives": "Peaceful/no-hunger training rules change this requirement.",
+      "rules": [
+        {
+          "kind": "inventory",
+          "items": [
+            "bread",
+            "apple",
+            "baked_potato",
+            "cooked_beef",
+            "cooked_porkchop",
+            "cooked_chicken",
+            "cooked_mutton",
+            "cooked_cod",
+            "cooked_salmon",
+            "carrot",
+            "potato",
+            "sweet_berries",
+            "glow_berries",
+            "melon_slice",
+            "beetroot",
+            "mushroom_stew",
+            "rabbit_stew",
+            "beetroot_soup",
+            "dried_kelp",
+            "porkchop",
+            "beef",
+            "chicken",
+            "mutton",
+            "rabbit",
+            "cooked_rabbit",
+            "cod",
+            "salmon",
+            "tropical_fish",
+            "pufferfish",
+            "rotten_flesh",
+            "spider_eye",
+            "poisonous_potato",
+            "cookie",
+            "pumpkin_pie",
+            "golden_carrot",
+            "golden_apple",
+            "enchanted_golden_apple",
+            "suspicious_stew"
+          ],
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "eat",
+      "group": "equipment",
+      "title": "Eat food",
+      "requirement": "preparation",
+      "instructions": [
+        "Select suitable food, hold use until consumption completes, and release.",
+        "Avoid harmful foods or account for their effects."
+      ],
+      "items": "One consumable food item.",
+      "minimum": "As needed; not a fixed mandatory number.",
+      "alternatives": "A food item in inventory is not proof that it has been eaten.",
+      "rules": [
+        {
+          "kind": "statistic",
+          "category": "used",
+          "names": [
+            "bread",
+            "apple",
+            "cooked_beef",
+            "cooked_porkchop",
+            "cooked_chicken",
+            "baked_potato",
+            "carrot",
+            "golden_carrot"
+          ],
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "weapon",
+      "group": "equipment",
+      "title": "Obtain a conventional melee weapon",
+      "requirement": "preparation",
+      "instructions": [
+        "Craft/obtain a sword or axe and reserve durability for the fight."
+      ],
+      "items": "Sword: 2 matching material units + 1 stick; axe: 3 + 2 sticks.",
+      "minimum": "0 weapons strictly required; bare-hand damage exists.",
+      "alternatives": "Beds/explosions are another combat route; tools and fists can also damage.",
+      "rules": [
+        {
+          "kind": "inventory",
+          "items": [
+            "wooden_sword",
+            "stone_sword",
+            "iron_sword",
+            "golden_sword",
+            "diamond_sword",
+            "netherite_sword",
+            "wooden_axe",
+            "stone_axe",
+            "iron_axe",
+            "golden_axe",
+            "diamond_axe",
+            "netherite_axe",
+            "trident"
+          ],
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "shield",
+      "group": "equipment",
+      "title": "Obtain a shield",
+      "requirement": "preparation",
+      "instructions": [
+        "Craft with six planks and one iron ingot; equip appropriately."
+      ],
+      "items": "6 planks + 1 iron ingot.",
+      "minimum": "0 mandatory; 1 recommended for hazards.",
+      "alternatives": "Shield does not make all dragon attacks harmless.",
+      "rules": [{ "kind": "inventory", "items": ["shield"], "count": 1 }]
+    },
+    {
+      "id": "armor",
+      "group": "equipment",
+      "title": "Obtain iron chest armor",
+      "requirement": "preparation",
+      "instructions": ["Craft or loot armor; equip the appropriate slots."],
+      "items": "Iron chestplate: 8 ingots. Full iron set: 24 ingots (5+8+7+4).",
+      "minimum": "0 armor strictly required.",
+      "alternatives": "Other materials and enchantments are optional; possession is not proof of equipment.",
+      "rules": [
+        { "kind": "inventory", "items": ["iron_chestplate"], "count": 1 },
+        { "kind": "advancement", "id": "minecraft:story/obtain_armor" }
+      ]
+    },
+    {
+      "id": "blocks",
+      "group": "equipment",
+      "title": "Hold building blocks",
+      "requirement": "preparation",
+      "instructions": [
+        "Gather blocks for bridging, pillaring, shelters and escape routes.",
+        "Do not assume a fixed stack suffices for every seed/platform layout."
+      ],
+      "items": "Suitable placeable solid blocks.",
+      "minimum": "Terrain-dependent; 64 is a useful supply checkpoint, not a guaranteed minimum.",
+      "alternatives": "Pearls/terrain can replace some bridges; Nether fire hazards affect material choice.",
+      "rules": [
+        {
+          "kind": "inventory",
+          "items": [
+            "cobblestone",
+            "cobbled_deepslate",
+            "dirt",
+            "netherrack",
+            "end_stone"
+          ],
+          "count": 64
+        }
+      ]
+    },
+    {
+      "id": "bed",
+      "group": "equipment",
+      "title": "Obtain a bed",
+      "requirement": "preparation",
+      "instructions": [
+        "Craft three wool of the same color and three planks, or collect a village bed.",
+        "Use only safe Overworld sleeping if setting a checkpoint."
+      ],
+      "items": "3 same-color wool + 3 planks per crafted bed.",
+      "minimum": "0 mandatory for completion.",
+      "alternatives": "Beds explode in Nether/End; a combat bed is consumed by the explosion.",
+      "rules": [{ "kind": "inventory", "suffix": "_bed", "count": 1 }]
+    },
+    {
+      "id": "spawn",
+      "group": "equipment",
+      "title": "Sleep in the Overworld",
+      "requirement": "preparation",
+      "instructions": [
+        "Place/use bed in the Overworld under valid sleep conditions; establish a practical recovery point."
+      ],
+      "items": "One accessible bed.",
+      "minimum": "Optional checkpoint.",
+      "alternatives": "Nether/End bed use explodes rather than setting ordinary bed spawn.",
+      "rules": [
+        { "kind": "advancement", "id": "minecraft:adventure/sleep_in_bed" }
+      ]
+    },
+    {
+      "id": "bucket",
+      "group": "portal",
+      "title": "Obtain a bucket",
+      "requirement": "route",
+      "instructions": [
+        "Craft three ingots in a V shape or obtain a bucket elsewhere."
+      ],
+      "items": "3 iron ingots → 1 bucket.",
+      "minimum": "One bucket can suffice with suitable existing water/flow arrangements; two simplify repeated casting.",
+      "alternatives": "Existing portal or mined obsidian can bypass bucket casting.",
+      "rules": [
+        {
+          "kind": "inventory",
+          "items": ["bucket", "water_bucket", "lava_bucket"],
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "water",
+      "group": "portal",
+      "title": "Obtain a water bucket",
+      "requirement": "route",
+      "instructions": [
+        "Use an empty bucket on a water source.",
+        "Preserve water placement/access for lava casting and later safety."
+      ],
+      "items": "1 bucket + water source.",
+      "minimum": "One reusable water supply for the chosen route.",
+      "alternatives": "A fixed water source/flow and one repeatedly emptied bucket can replace two carried buckets.",
+      "rules": [{ "kind": "inventory", "items": ["water_bucket"], "count": 1 }]
+    },
+    {
+      "id": "lava",
+      "group": "portal",
+      "title": "Obtain a lava bucket",
+      "requirement": "route",
+      "instructions": [
+        "Find a lava source, use a bucket to collect it, and plan safe placement."
+      ],
+      "items": "Bucket + lava source.",
+      "minimum": "Ten source-lava placements for a wholly new cornerless cast frame; bucket reused.",
+      "alternatives": "Existing obsidian frame/ruined portal reduces new placements.",
+      "rules": [{ "kind": "inventory", "items": ["lava_bucket"], "count": 1 }]
+    },
+    {
+      "id": "flint",
+      "group": "portal",
+      "title": "Obtain flint",
+      "requirement": "route",
+      "instructions": ["Mine gravel until flint drops, or loot/trade it."],
+      "items": "Gravel or alternate flint source.",
+      "minimum": "1 flint for crafted flint and steel; gravel drops are random without applicable enchantment.",
+      "alternatives": "Other ignition routes remove this item requirement.",
+      "rules": [{ "kind": "inventory", "items": ["flint"], "count": 1 }]
+    },
+    {
+      "id": "igniter",
+      "group": "portal",
+      "title": "Obtain a portal igniter",
+      "requirement": "route",
+      "instructions": [
+        "Craft flint and steel with one flint and one iron ingot; reserve durability."
+      ],
+      "items": "1 iron ingot + 1 flint, or fire charge/other ignition source.",
+      "minimum": "1 ignition action on a valid frame.",
+      "alternatives": "Lava-caused fire, existing lit portals or found igniters avoid the recipe.",
+      "rules": [
+        {
+          "kind": "inventory",
+          "items": ["flint_and_steel", "fire_charge"],
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "diamond",
+      "group": "portal",
+      "title": "Obtain three diamonds (mining alternative)",
+      "requirement": "route",
+      "instructions": [
+        "Use iron-or-better pickaxe to mine diamond ore, or obtain diamonds from loot/trade.",
+        "Reserve three for a diamond pickaxe if mining obsidian."
+      ],
+      "items": "3 diamonds; iron pickaxe recipe adds 3 ingots + 2 sticks.",
+      "minimum": "0 diamonds for bucket casting; 3 for self-crafted diamond pickaxe.",
+      "alternatives": "Found diamond/netherite pickaxe replaces crafting.",
+      "rules": [{ "kind": "inventory", "items": ["diamond"], "count": 3 }]
+    },
+    {
+      "id": "diamond-pick",
+      "group": "portal",
+      "title": "Obtain an obsidian-capable pickaxe",
+      "requirement": "route",
+      "instructions": [
+        "Craft diamond pickaxe with three diamonds and two sticks, or obtain diamond/netherite pickaxe."
+      ],
+      "items": "Diamond/netherite pickaxe.",
+      "minimum": "0 for casting directly into frame; 1 for survival obsidian drops through mining.",
+      "alternatives": "Bucket casting/looted obsidian bypasses this tool.",
+      "rules": [
+        {
+          "kind": "inventory",
+          "items": ["diamond_pickaxe", "netherite_pickaxe"],
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "obsidian",
+      "group": "portal",
+      "title": "Hold ten obsidian (mining/loot alternative)",
+      "requirement": "route",
+      "instructions": [
+        "Mine obsidian with sufficient tool or loot it.",
+        "Build a vertical frame with 2×3 empty interior; corners can be omitted."
+      ],
+      "items": "10 obsidian for cornerless 4×5 outer footprint; 14 if corners included.",
+      "minimum": "10 frame blocks in the world; inventory obsidian can be 0 when casting directly.",
+      "alternatives": "Ruined/existing frames reduce missing blocks. Crying obsidian cannot form a normal Nether portal.",
+      "rules": [{ "kind": "inventory", "items": ["obsidian"], "count": 10 }]
+    },
+    {
+      "id": "see-portal",
+      "group": "portal",
+      "title": "Observe an active Nether portal",
+      "requirement": "route",
+      "instructions": [
+        "Complete valid frame, remove obstructing interior blocks, ignite inside, and verify purple portal blocks.",
+        "Keep a safe route back."
+      ],
+      "items": "Valid obsidian frame + ignition; interior at least 2×3.",
+      "minimum": "One active portal; it may preexist.",
+      "alternatives": "Sighting proves an active local portal, not that this agent built/ignited it.",
+      "rules": [{ "kind": "block", "names": ["nether_portal"] }]
+    },
+    {
+      "id": "enter-nether",
+      "group": "portal",
+      "title": "Enter the Nether",
+      "requirement": "route",
+      "instructions": [
+        "Move into the active portal, wait for dimension transfer, and verify destination."
+      ],
+      "items": "Active Nether portal.",
+      "minimum": "Required for self-sourced blaze rods in ordinary fresh survival, not for an already filled End portal.",
+      "alternatives": "World must allow Nether travel; do not use beds there for normal sleeping.",
+      "rules": [
+        { "kind": "dimension", "name": "the_nether" },
+        { "kind": "advancement", "id": "minecraft:story/enter_the_nether" }
+      ]
+    },
+    {
+      "id": "gold-armor",
+      "group": "nether",
+      "title": "Obtain gold armor for piglin safety",
+      "requirement": "preparation",
+      "instructions": [
+        "Craft/loot and equip a gold armor piece when traveling among piglins."
+      ],
+      "items": "Gold boots: 4 gold ingots; another armor piece can substitute.",
+      "minimum": "0 mandatory; one equipped piece reduces ordinary piglin hostility under its rules.",
+      "alternatives": "Possession alone does not prove it is equipped; mining gold/opening containers can still provoke piglins.",
+      "rules": [
+        {
+          "kind": "inventory",
+          "items": [
+            "golden_boots",
+            "golden_helmet",
+            "golden_chestplate",
+            "golden_leggings"
+          ],
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "fortress",
+      "group": "nether",
+      "title": "Reach a Nether fortress",
+      "requirement": "route",
+      "instructions": [
+        "Explore safely until entering a generated fortress bounding region.",
+        "Locate blaze spawning areas without falling/lava exposure."
+      ],
+      "items": "Navigation/survival capability; no fixed consumable ingredient.",
+      "minimum": "One fortress for conventional blaze route.",
+      "alternatives": "Advancement proves entering the structure, not discovering a spawner specifically.",
+      "rules": [
+        { "kind": "advancement", "id": "minecraft:nether/find_fortress" }
+      ]
+    },
+    {
+      "id": "blaze-seen",
+      "group": "nether",
+      "title": "Observe a blaze spawner",
+      "requirement": "route",
+      "instructions": [
+        "Find and approach a reachable fortress spawner or naturally spawning blazes.",
+        "Use cover and respect spawner activation distance."
+      ],
+      "items": "Reachable blaze source; non-Peaceful ordinary mob spawning.",
+      "minimum": "Spawner not mandatory if natural fortress blazes are available.",
+      "alternatives": "Sighting a spawner alone does not identify its mob type; the block-entity data must say blaze.",
+      "rules": [{ "kind": "server-event", "event": "blaze-seen" }]
+    },
+    {
+      "id": "kill-blaze",
+      "group": "nether",
+      "title": "Kill a blaze",
+      "requirement": "route",
+      "instructions": [
+        "Fight a blaze, survive, and receive player kill credit."
+      ],
+      "items": "Any effective attack method; conventional weapon/cover optional.",
+      "minimum": "At least one credited kill; rod count depends on random drops and looting.",
+      "alternatives": "Only credited kill statistics confirm this milestone; merely seeing a blaze die is insufficient.",
+      "rules": [
+        {
+          "kind": "statistic",
+          "category": "killed",
+          "names": ["blaze"],
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "rod",
+      "group": "nether",
+      "title": "Obtain a blaze rod",
+      "requirement": "route",
+      "instructions": [
+        "Collect a rod from player/qualifying kill drops or legally supplied resources."
+      ],
+      "items": "Blaze rod.",
+      "minimum": "ceil(E/2) rods for E crafted eyes, before other blaze-powder uses.",
+      "alternatives": "Ordinary fresh survival cannot replace blaze powder with another eye ingredient; a prefilled portal avoids eye production.",
+      "rules": [
+        { "kind": "inventory", "items": ["blaze_rod"], "count": 1 },
+        { "kind": "advancement", "id": "minecraft:nether/obtain_blaze_rod" }
+      ]
+    },
+    {
+      "id": "rods-six",
+      "group": "nether",
+      "title": "Hold six blaze rods",
+      "requirement": "route",
+      "instructions": [
+        "Continue collecting rods until the selected eye budget is available."
+      ],
+      "items": "6 blaze rods → 12 blaze powder.",
+      "minimum": "6 for 12 crafted eyes with no other powder use; more for search losses/brewing.",
+      "alternatives": "You may craft incrementally and never hold six at once; this supply checkpoint is not a prerequisite gate.",
+      "rules": [{ "kind": "inventory", "items": ["blaze_rod"], "count": 6 }]
+    },
+    {
+      "id": "powder",
+      "group": "nether",
+      "title": "Obtain blaze powder",
+      "requirement": "route",
+      "instructions": [
+        "Put a blaze rod in personal crafting grid; take both powder items."
+      ],
+      "items": "1 blaze rod → 2 blaze powder.",
+      "minimum": "1 powder per newly crafted eye.",
+      "alternatives": "Brewing stand/fuel is optional and spends extra rods/powder.",
+      "rules": [{ "kind": "inventory", "items": ["blaze_powder"], "count": 1 }]
+    },
+    {
+      "id": "craft-powder",
+      "group": "nether",
+      "title": "Craft blaze powder",
+      "requirement": "route",
+      "instructions": ["Take the powder output from a valid recipe."],
+      "items": "1 rod per 2 powder.",
+      "minimum": "ceil(E/2) rods gives enough powder for E eyes.",
+      "alternatives": "Possession alone is tracked separately from crafting evidence.",
+      "rules": [
+        {
+          "kind": "statistic",
+          "category": "crafted",
+          "names": ["blaze_powder"],
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "return-overworld",
+      "group": "nether",
+      "title": "Return to the Overworld",
+      "requirement": "route",
+      "instructions": [
+        "Use a Nether portal and verify an Overworld spawn before searching for a stronghold."
+      ],
+      "items": "Accessible active portal.",
+      "minimum": "No additional consumed material for an existing safe return portal.",
+      "alternatives": "An initially Overworld agent does not satisfy this transition; tracker requires earlier observed Nether presence.",
+      "rules": [{ "kind": "dimension", "name": "overworld_after_nether" }]
+    },
+    {
+      "id": "kill-enderman",
+      "group": "pearls",
+      "title": "Kill an Enderman (hunting route)",
+      "requirement": "route",
+      "instructions": [
+        "Find Endermen and use a safe combat method, such as a low shelter or water escape.",
+        "Receive kill credit and collect dropped pearls."
+      ],
+      "items": "No fixed recipe; effective attack/survival method.",
+      "minimum": "Pearl drops are random; no fixed kill count guarantees the target amount.",
+      "alternatives": "Trading or bartering can skip hunting entirely.",
+      "rules": [
+        {
+          "kind": "statistic",
+          "category": "killed",
+          "names": ["enderman"],
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "gold",
+      "group": "pearls",
+      "title": "Obtain gold ingots (bartering route)",
+      "requirement": "route",
+      "instructions": [
+        "Acquire ingots via mining/smelting, nugget conversion or loot.",
+        "Use ordinary adult piglins, not piglin brutes, for bartering."
+      ],
+      "items": "Gold ingots; 9 nuggets craft 1 ingot; 1 gold block gives 9 ingots.",
+      "minimum": "Random barter outcomes mean no finite guaranteed ingot count for a pearl target.",
+      "alternatives": "A barter yields a batch of 2–4 pearls when the pearl outcome occurs in 1.18.1; hunting/cleric route avoids this budget.",
+      "rules": [{ "kind": "inventory", "items": ["gold_ingot"], "count": 1 }]
+    },
+    {
+      "id": "barter",
+      "group": "pearls",
+      "title": "Confirm a piglin barter",
+      "requirement": "route",
+      "instructions": [
+        "Give/drop gold ingot to an eligible adult piglin, wait for processing and collect output."
+      ],
+      "items": "Adult piglin + gold ingot.",
+      "minimum": "One ingot per barter; repeated RNG outcomes may be needed.",
+      "alternatives": "Holding both gold and pearls does not prove bartering.",
+      "rules": [
+        { "kind": "advancement", "id": "minecraft:nether/distract_piglin" }
+      ]
+    },
+    {
+      "id": "cleric",
+      "group": "pearls",
+      "title": "Open a villager trade menu (cleric route)",
+      "requirement": "route",
+      "instructions": [
+        "Find or establish a cleric using a brewing stand and valid villager profession conditions.",
+        "Level trades to the pearl-selling tier; inspect actual offers."
+      ],
+      "items": "Villager, workstation if creating cleric, trade goods/emeralds; a crafted stand needs 1 rod + 3 cobblestone/blackstone.",
+      "minimum": "Generated offers/leveling costs determine actual emerald and goods budget.",
+      "alternatives": "This detector proves a merchant menu was opened, not that it was a cleric or offered pearls.",
+      "rules": [{ "kind": "window", "type": "merchant" }]
+    },
+    {
+      "id": "trade",
+      "group": "pearls",
+      "title": "Complete a villager trade",
+      "requirement": "route",
+      "instructions": [
+        "Select a real offer, supply inputs, take output, and receive advancement."
+      ],
+      "items": "Actual offer inputs.",
+      "minimum": "No fixed universal count; repeated purchases depend on offer/restock limits.",
+      "alternatives": "Any trade confirms trading capability; pearls still require the actual pearl offer.",
+      "rules": [{ "kind": "advancement", "id": "minecraft:adventure/trade" }]
+    },
+    {
+      "id": "pearl",
+      "group": "pearls",
+      "title": "Obtain an Ender pearl",
+      "requirement": "route",
+      "instructions": ["Collect a hunted, bartered, traded or looted pearl."],
+      "items": "Ender pearl.",
+      "minimum": "1 pearl per crafted eye, plus any thrown for travel.",
+      "alternatives": "Pearls spent as teleports are unavailable for crafting.",
+      "rules": [{ "kind": "inventory", "items": ["ender_pearl"], "count": 1 }]
+    },
+    {
+      "id": "pearls-twelve",
+      "group": "pearls",
+      "title": "Hold twelve Ender pearls",
+      "requirement": "route",
+      "instructions": [
+        "Gather the pearl budget for an unfilled portal before consuming travel/search supplies."
+      ],
+      "items": "12 Ender pearls.",
+      "minimum": "12 only for 12 new eyes, no search loss or teleport spending.",
+      "alternatives": "Prefilled frames reduce needed eyes; incremental crafting may bypass this possession checkpoint.",
+      "rules": [{ "kind": "inventory", "items": ["ender_pearl"], "count": 12 }]
+    },
+    {
+      "id": "eye",
+      "group": "stronghold",
+      "title": "Obtain an Eye of Ender",
+      "requirement": "route",
+      "instructions": [
+        "Combine one pearl and one blaze powder in personal crafting grid and take one eye."
+      ],
+      "items": "1 Ender pearl + 1 blaze powder → 1 Eye of Ender.",
+      "minimum": "One eye per missing portal frame; zero if all 12 are prefilled.",
+      "alternatives": "Finding a stronghold without eye throws is possible; throwing eyes does not activate a portal.",
+      "rules": [{ "kind": "inventory", "items": ["ender_eye"], "count": 1 }]
+    },
+    {
+      "id": "craft-eye",
+      "group": "stronghold",
+      "title": "Craft an Eye of Ender",
+      "requirement": "route",
+      "instructions": ["Take the actual recipe output."],
+      "items": "One pearl and one powder per eye.",
+      "minimum": "E eyes require E pearls and E powder.",
+      "alternatives": "This milestone uses crafting statistics, not inventory coincidence.",
+      "rules": [
+        {
+          "kind": "statistic",
+          "category": "crafted",
+          "names": ["ender_eye"],
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "eyes-twelve",
+      "group": "stronghold",
+      "title": "Hold twelve Eyes of Ender",
+      "requirement": "route",
+      "instructions": [
+        "Prepare a complete unfilled-portal eye budget before insertion."
+      ],
+      "items": "12 Eyes of Ender.",
+      "minimum": "Portal insertion count is 12 − prefilled frames; search losses are additional.",
+      "alternatives": "This is a conservative supply checkpoint, not universally mandatory.",
+      "rules": [{ "kind": "inventory", "items": ["ender_eye"], "count": 12 }]
+    },
+    {
+      "id": "throw-eye",
+      "group": "stronghold",
+      "title": "Use an Eye of Ender for navigation",
+      "requirement": "route",
+      "instructions": [
+        "Use an eye in the Overworld, follow its flight, recover it if it drops, repeat/triangulate as needed.",
+        "Reserve enough intact eyes for insertion."
+      ],
+      "items": "Reusable eye if it returns; replacement eyes if it breaks.",
+      "minimum": "No fixed worst-case search-loss budget; no throws needed for an already-known stronghold.",
+      "alternatives": "Use statistic confirms use, but does not prove an independent successful triangulation.",
+      "rules": [
+        {
+          "kind": "statistic",
+          "category": "used",
+          "names": ["ender_eye"],
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "stronghold",
+      "group": "stronghold",
+      "title": "Reach a stronghold",
+      "requirement": "route",
+      "instructions": [
+        "Travel to the indicated area, dig a safe approach, and enter the generated stronghold."
+      ],
+      "items": "Navigation and safe excavation tools/route.",
+      "minimum": "One reachable stronghold with a portal room.",
+      "alternatives": "The Eye Spy advancement is location-based in 1.18.1; eye throwing is not a prerequisite for receiving it.",
+      "rules": [
+        { "kind": "advancement", "id": "minecraft:story/follow_ender_eye" }
+      ]
+    },
+    {
+      "id": "portal-room",
+      "group": "stronghold",
+      "title": "Observe End portal frames",
+      "requirement": "route",
+      "instructions": [
+        "Search corridors/stairs for the portal room; handle silverfish and lava hazards.",
+        "Inspect all twelve frame blocks and count existing eyes."
+      ],
+      "items": "Existing generated frame ring; frames cannot ordinarily be crafted/placed in survival.",
+      "minimum": "12 correctly arranged inward-facing frames; one surviving usable portal room.",
+      "alternatives": "Local frame sighting does not prove the full ring or count all prefilled eyes.",
+      "rules": [{ "kind": "block", "names": ["end_portal_frame"] }]
+    },
+    {
+      "id": "insert-eye",
+      "group": "stronghold",
+      "title": "Observe a filled End portal frame",
+      "requirement": "route",
+      "instructions": [
+        "Use eyes on empty frames; preserve existing filled frames."
+      ],
+      "items": "1 eye per empty frame.",
+      "minimum": "P = 12 − s where s is prefilled count; P can be 0.",
+      "alternatives": "Sighting an eye-filled frame does not establish that this agent inserted it.",
+      "rules": [
+        {
+          "kind": "block",
+          "names": ["end_portal_frame"],
+          "properties": { "eye": "true" }
+        }
+      ]
+    },
+    {
+      "id": "active-end-portal",
+      "group": "stronghold",
+      "title": "Observe an active End portal",
+      "requirement": "route",
+      "instructions": [
+        "Fill all missing eyes, verify active portal blocks inside the ring, and finish preparation before jumping in."
+      ],
+      "items": "Complete filled frame ring; usable portal.",
+      "minimum": "No extra eye if already active.",
+      "alternatives": "Activation can be performed by another player; observation is not ownership credit.",
+      "rules": [{ "kind": "block", "names": ["end_portal"] }]
+    },
+    {
+      "id": "enter-end",
+      "group": "dragon",
+      "title": "Enter the End",
+      "requirement": "completion",
+      "instructions": [
+        "Move/jump into the active End portal and verify End dimension.",
+        "Check spawn platform, void exposure and nearby island before moving."
+      ],
+      "items": "Active End portal; bridging/pearls if terrain requires them.",
+      "minimum": "Entering the End is required; a survival escape route is not automatically available until dragon defeat.",
+      "alternatives": "Spawn-platform geometry controls required bridge/travel supplies.",
+      "rules": [
+        { "kind": "dimension", "name": "the_end" },
+        { "kind": "advancement", "id": "minecraft:story/enter_the_end" }
+      ]
+    },
+    {
+      "id": "reach-island",
+      "group": "dragon",
+      "title": "Reach the main End island",
+      "requirement": "route",
+      "instructions": [
+        "If platform is separated, bridge/pillar or use a valid pearl trajectory; move to stable End stone."
+      ],
+      "items": "Terrain-dependent blocks or pearl.",
+      "minimum": "No universal block count; no bridge if platform is already connected.",
+      "alternatives": "Tracker verifies nearby End stone while in End, not the quality of every bridge movement.",
+      "rules": [{ "kind": "block", "names": ["end_stone"] }]
+    },
+    {
+      "id": "bow",
+      "group": "dragon",
+      "title": "Obtain a bow (ranged route)",
+      "requirement": "preparation",
+      "instructions": [
+        "Craft/loot a bow and obtain ammunition; practice aim before End hazards."
+      ],
+      "items": "3 sticks + 3 string → 1 bow.",
+      "minimum": "0 bows mandatory; 1 for conventional ranged crystal/flying attacks.",
+      "alternatives": "Crossbow costs 3 sticks + 2 string + 1 iron ingot + 1 tripwire hook; other damage routes exist.",
+      "rules": [
+        { "kind": "inventory", "items": ["bow", "crossbow"], "count": 1 }
+      ]
+    },
+    {
+      "id": "arrows",
+      "group": "dragon",
+      "title": "Obtain ammunition",
+      "requirement": "preparation",
+      "instructions": [
+        "Craft with flint, stick and feather or collect/trade arrows; select compatible ammunition."
+      ],
+      "items": "1 flint + 1 stick + 1 feather → 4 arrows.",
+      "minimum": "No fixed universal count; misses/crystal route/enchants alter consumption.",
+      "alternatives": "Infinity bows need an eligible arrow; crossbows and special ammunition have their own rules.",
+      "rules": [
+        {
+          "kind": "inventory",
+          "items": ["arrow", "spectral_arrow", "tipped_arrow"],
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "pumpkin",
+      "group": "dragon",
+      "title": "Obtain carved pumpkin (optional)",
+      "requirement": "preparation",
+      "instructions": [
+        "Shear a placed pumpkin and collect/equip carved pumpkin for Enderman gaze protection."
+      ],
+      "items": "Pumpkin + shears if crafting this way; shears cost 2 iron ingots.",
+      "minimum": "0 mandatory; 1 optional head item.",
+      "alternatives": "It reduces vision and does not prevent every cause of Enderman aggression.",
+      "rules": [
+        { "kind": "inventory", "items": ["carved_pumpkin"], "count": 1 }
+      ]
+    },
+    {
+      "id": "crystal",
+      "group": "dragon",
+      "title": "Observe an End crystal",
+      "requirement": "route",
+      "instructions": [
+        "Identify crystals on obsidian pillars and which are caged.",
+        "Plan ranged shot or safe pillar access; account for explosion radius."
+      ],
+      "items": "No item consumed just to observe.",
+      "minimum": "Crystal destruction is a practical fight plan, not logically necessary if damage outpaces healing.",
+      "alternatives": "Seeing a crystal disappear or a nearby explosion is not proof this agent destroyed it.",
+      "rules": [{ "kind": "server-event", "event": "crystal" }]
+    },
+    {
+      "id": "destroy-crystals",
+      "group": "dragon",
+      "title": "Destroy healing End crystals",
+      "requirement": "route",
+      "instructions": [
+        "Shoot exposed crystals or reach them using safe traversal.",
+        "For caged pillars, reach a safe position and open iron bars with a suitable method.",
+        "Break crystals without standing in their explosion, then verify remaining healing sources."
+      ],
+      "items": "Weapon/projectile or safe melee access; blocks/water as needed.",
+      "minimum": "Zero strictly required for theoretical completion; ordinary fresh fights generate ten pillars/crystals.",
+      "alternatives": "There is no fixed arrow/block budget and no requirement to collect crystal items.",
+      "rules": [{ "kind": "server-event", "event": "destroy-crystals" }]
+    },
+    {
+      "id": "fight-dragon",
+      "group": "dragon",
+      "title": "Damage the Ender Dragon",
+      "requirement": "completion",
+      "instructions": [
+        "Track flying/perching phases, avoid breath/knockback/void, and attack valid vulnerable parts.",
+        "Use conventional attacks or a safely executed explosion route; continue until lethal damage."
+      ],
+      "items": "Any successful damage method; beds/materials conditional.",
+      "minimum": "Damage is required to defeat it; no specific sword/armor/bow item is mandatory.",
+      "alternatives": "Observing damage alone does not identify the attacker.",
+      "rules": [
+        { "kind": "server-event", "event": "fight-dragon" },
+        { "kind": "advancement", "id": "minecraft:end/kill_dragon" },
+        {
+          "kind": "statistic",
+          "category": "killed",
+          "names": ["ender_dragon"],
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "bed-fight",
+      "group": "dragon",
+      "title": "Prepare beds for explosive combat (alternative)",
+      "requirement": "route",
+      "instructions": [
+        "Obtain sufficient beds and protective positioning blocks.",
+        "Place/use a bed near a valid dragon-perch setup in the End, keep explosion shielding, and repeat if needed."
+      ],
+      "items": "Each crafted bed: 3 same-color wool + 3 planks; protective block/setup.",
+      "minimum": "No fixed guaranteed bed count; damage depends on placement/timing. Each exploded bed is consumed.",
+      "alternatives": "Conventional melee/ranged attacks skip this route entirely.",
+      "rules": [
+        { "kind": "inventory", "suffix": "_bed", "count": 1 },
+        {
+          "kind": "statistic",
+          "category": "used",
+          "names": [
+            "white_bed",
+            "red_bed",
+            "blue_bed",
+            "black_bed",
+            "yellow_bed",
+            "green_bed",
+            "pink_bed",
+            "orange_bed",
+            "purple_bed",
+            "cyan_bed",
+            "light_blue_bed",
+            "light_gray_bed",
+            "gray_bed",
+            "lime_bed",
+            "brown_bed",
+            "magenta_bed"
+          ],
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "kill-dragon",
+      "group": "dragon",
+      "title": "Receive Ender Dragon kill credit",
+      "requirement": "completion",
+      "instructions": [
+        "Complete the fight and receive Free the End advancement or a player dragon-kill statistic."
+      ],
+      "items": "Successful credited dragon defeat.",
+      "minimum": "One defeat for initial completion.",
+      "alternatives": "Seeing another player's kill, rewards or a spawned exit portal is not this agent's kill credit.",
+      "rules": [
+        { "kind": "advancement", "id": "minecraft:end/kill_dragon" },
+        {
+          "kind": "statistic",
+          "category": "killed",
+          "names": ["ender_dragon"],
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "exit-portal",
+      "group": "finish",
+      "title": "Observe the active End exit portal",
+      "requirement": "route",
+      "instructions": [
+        "After dragon defeat, approach the central exit fountain and verify active portal surface."
+      ],
+      "items": "An active central End exit portal.",
+      "minimum": "One usable exit portal.",
+      "alternatives": "A portal at a stronghold is not an End exit; tracker requires current End dimension.",
+      "rules": [{ "kind": "block", "names": ["end_portal"] }]
+    },
+    {
+      "id": "credits",
+      "group": "finish",
+      "title": "Trigger the End completion/credits event",
+      "requirement": "completion",
+      "instructions": [
+        "Enter the central End exit portal after the dragon fight.",
+        "Receive the server's win-game event; a rendered client may display the End poem/credits."
+      ],
+      "items": "Active End exit portal; no item consumed.",
+      "minimum": "One valid win-game event. Headless bots do not have a rendered credits screen.",
+      "alternatives": "The event alone does not prove this same agent killed the dragon; those milestones stay separate.",
+      "rules": [{ "kind": "credits" }]
+    },
+    {
+      "id": "return-end",
+      "group": "finish",
+      "title": "Return from the End via the completion route",
+      "requirement": "completion",
+      "instructions": [
+        "Finish/skip credits or allow the client backend's ordinary respawn response.",
+        "Verify a subsequent Overworld spawn/dimension after the End exit event."
+      ],
+      "items": "No additional item; normal server/client lifecycle.",
+      "minimum": "A return after the recorded win-game event.",
+      "alternatives": "Death or an admin teleport alone does not satisfy this detector.",
+      "rules": [{ "kind": "end-return" }]
+    },
+    {
+      "id": "egg",
+      "group": "postgame",
+      "title": "Obtain the dragon egg (not required)",
+      "requirement": "postgame",
+      "instructions": [
+        "Collect the egg through a valid torch/piston or other survival method after its teleport mechanic."
+      ],
+      "items": "Method-dependent torch/piston/support.",
+      "minimum": "0 for completion.",
+      "alternatives": "Egg is a trophy, not an ingredient needed to finish the game.",
+      "rules": [{ "kind": "inventory", "items": ["dragon_egg"], "count": 1 }]
+    },
+    {
+      "id": "gateway",
+      "group": "postgame",
+      "title": "Use an End gateway (not required)",
+      "requirement": "postgame",
+      "instructions": [
+        "After dragon defeat, use the gateway to reach outer islands by safe pearl/crawl/other valid method."
+      ],
+      "items": "Method-dependent travel supplies.",
+      "minimum": "0 for initial completion.",
+      "alternatives": "Advancement confirms gateway traversal, not return credits.",
+      "rules": [
+        { "kind": "advancement", "id": "minecraft:end/enter_end_gateway" }
+      ]
+    },
+    {
+      "id": "city",
+      "group": "postgame",
+      "title": "Reach an End city (not required)",
+      "requirement": "postgame",
+      "instructions": ["Explore outer islands and enter an End city."],
+      "items": "Travel/survival resources.",
+      "minimum": "0 for completion.",
+      "alternatives": "Not all cities have a ship.",
+      "rules": [{ "kind": "advancement", "id": "minecraft:end/find_end_city" }]
+    },
+    {
+      "id": "elytra",
+      "group": "postgame",
+      "title": "Obtain elytra (not required)",
+      "requirement": "postgame",
+      "instructions": ["Find an End ship and collect the elytra."],
+      "items": "Ship access; optional flight rockets/repair materials later.",
+      "minimum": "0 for completion.",
+      "alternatives": "Not a prerequisite for first dragon fight.",
+      "rules": [
+        { "kind": "inventory", "items": ["elytra"], "count": 1 },
+        { "kind": "advancement", "id": "minecraft:end/elytra" }
+      ]
+    },
+    {
+      "id": "respawn-dragon",
+      "group": "postgame",
+      "title": "Respawn the dragon (not required)",
+      "requirement": "postgame",
+      "instructions": [
+        "Place four End crystals around the exit fountain in the valid pattern."
+      ],
+      "items": "4 crystals; each crafted from 7 glass + 1 Eye of Ender + 1 ghast tear.",
+      "minimum": "0 for first completion; crafted respawn set uses 28 glass + 4 eyes + 4 tears.",
+      "alternatives": "Repeated dragon fights and all-advancement completion are separate goals.",
+      "rules": [{ "kind": "advancement", "id": "minecraft:end/respawn_dragon" }]
+    }
+  ],
+  "resources": [
+    {
+      "item": "Eye of Ender",
+      "minimum": "P = 12 − s inserted eyes; E = P + L crafted/search replacement eyes.",
+      "route": "Portal activation",
+      "notes": "s is prefilled-frame count (0–12); L is unrecovered broken/lost eye consumption. Extra deliberately stored spare eyes are additional. A fully prefilled portal needs 0 crafted eyes."
+    },
+    {
+      "item": "Ender pearl",
+      "minimum": "E pearls for E crafted eyes, plus pearls actually spent on travel.",
+      "route": "Hunting / bartering / cleric trade / loot",
+      "notes": "RNG drops/barters have no finite guaranteed kill/ingot count; item possession does not identify source."
+    },
+    {
+      "item": "Blaze powder / rods",
+      "minimum": "E powder; ceil(E/2) rods if converting rods only.",
+      "route": "Fortress rod drops → powder",
+      "notes": "1 rod gives 2 powder; brewing/cleric workstation costs extra. Twelve new eyes cost 12 pearls + 12 powder = 6 rods."
+    },
+    {
+      "item": "Nether portal frame",
+      "minimum": "10 obsidian frame blocks (cornerless) or 14 with corners; subtract usable existing blocks.",
+      "route": "Bucket casting / diamond mining / loot / ruined portal",
+      "notes": "Cast blocks can remain in world: no obsidian inventory stack required. Crying obsidian is invalid. A prelit portal skips construction/ignition."
+    },
+    {
+      "item": "Bucket + ignition",
+      "minimum": "Crafted bucket 3 iron; flint and steel 1 iron + 1 flint: 4 iron total.",
+      "route": "Chosen single-bucket casting + crafted igniter",
+      "notes": "One reusable bucket with suitable water flow can suffice; two buckets raise budget to 7 iron with igniter. Repeated lava sources are needed. Found tools/natural ignition alter budget."
+    },
+    {
+      "item": "Conventional bootstrap",
+      "minimum": "Table 4 planks; sticks 2 planks → 4; wooden pick 3 planks + 2 sticks; stone pick 3 stone + 2 sticks; furnace 8 stone.",
+      "route": "Empty-inventory self-crafted tools",
+      "notes": "Combined: 9 planks (at least 3 ordinary logs giving 12 planks), 11 cobblestone/cobbled deepslate, plus iron ore/fuel. Remaining 3 planks may be fuel. Found stations/tools bypass costs."
+    },
+    {
+      "item": "Iron smelting",
+      "minimum": "4 raw iron/ore + enough fuel for 4 smelts in chosen casting/igniter route.",
+      "route": "Stone-or-better mining → furnace",
+      "notes": "1 coal/charcoal can smelt 8 items. Making charcoal has its own log/fuel cost; ordinary planks are another fuel route. Standard route need not consume diamonds."
+    },
+    {
+      "item": "Diamond mining alternative",
+      "minimum": "Diamond pick 3 diamonds + 2 sticks; iron pick 3 iron + 2 sticks if crafting ore-mining prerequisite.",
+      "route": "Mining obsidian",
+      "notes": "0 diamonds for casting/looted obsidian. Existing diamond/netherite tools bypass recipes."
+    },
+    {
+      "item": "Gold",
+      "minimum": "No fixed guaranteed barter budget; gold boots 4 ingots if crafting piglin armor.",
+      "route": "Piglin pearl alternative",
+      "notes": "Adult piglins barter ingots; brutes do not. Gold armor safety is conditional, not invulnerability."
+    },
+    {
+      "item": "Cleric trade setup",
+      "minimum": "Offer/level-dependent emeralds and goods; crafted brewing stand 1 blaze rod + 3 cobblestone/blackstone.",
+      "route": "Villager pearl alternative",
+      "notes": "Actual generated pearl offer, level, prices and restock behavior determine budget; no universal fixed emerald count."
+    },
+    {
+      "item": "Melee equipment",
+      "minimum": "Sword 2 material + 1 stick; axe 3 material + 2 sticks; shield 6 planks + 1 iron.",
+      "route": "Conventional combat preparation",
+      "notes": "None of these specific items is universally mandatory; bare-hand/explosion damage alternatives exist."
+    },
+    {
+      "item": "Bow / arrows",
+      "minimum": "Bow 3 sticks + 3 string; arrow batch 1 flint + 1 stick + 1 feather → 4 arrows.",
+      "route": "Ranged preparation",
+      "notes": "Exact shots needed are skill/route-dependent. A 64-arrow crafted reserve uses 16 each flint/stick/feather; not a minimum guarantee."
+    },
+    {
+      "item": "Armor",
+      "minimum": "Iron set 24 ingots (helmet 5, chest 8, legs 7, boots 4).",
+      "route": "Optional survival protection",
+      "notes": "0 mandatory; other materials/enchants substitute. Shield/armor do not protect against the void."
+    },
+    {
+      "item": "Beds",
+      "minimum": "3 same-color wool + 3 planks per crafted bed; bed count is fight-dependent.",
+      "route": "Checkpoint / End explosion alternative",
+      "notes": "Overworld sleep optional; beds explode in Nether/End. No fixed number guarantees dragon defeat across timings/damage."
+    },
+    {
+      "item": "Food / blocks / water / safety",
+      "minimum": "Travel-, difficulty-, terrain-, damage- and skill-dependent; no universal count.",
+      "route": "Practical preparation",
+      "notes": "Carry enough building blocks, edible food, water and durability for selected route; don't present recommended stacks as mathematical minima."
+    }
+  ]
+}

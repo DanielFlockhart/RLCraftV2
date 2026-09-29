@@ -1,0 +1,77 @@
+name: rlcraft-v2
+services:
+  control:
+    image: rlcraft-v2-control:local
+    build:
+      context: ..
+      target: control
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 90s
+    environment:
+      CONTROL_TOKEN_FILE: /run/secrets/control_token
+      MAX_CONCURRENT_RUNS: ${MAX_CONCURRENT_RUNS:-2}
+      MAX_AGENTS: ${MAX_AGENTS:-16}
+      MC_MAX_PLAYERS: ${MC_MAX_PLAYERS:-100}
+      MC_BIND_HOST: 0.0.0.0
+      MC_HOST: 127.0.0.1
+      MC_MIN_MEMORY: ${MC_MIN_MEMORY:-1G}
+      MC_MAX_MEMORY: ${MC_MAX_MEMORY:-4G}
+    volumes:
+      - ./cloud.state/data:/data
+      - ./cloud.state/artifacts:/artifacts
+      - ./cloud.state/server:/server
+    secrets:
+      - control_token
+    ports:
+      - "127.0.0.1:${CLOUD_MC_PORT:-25565}:25565"
+    cpus: ${CONTROL_CPUS:-4}
+    mem_limit: ${CONTROL_MEMORY:-6g}
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:4100/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+  dashboard:
+    image: rlcraft-v2-dashboard:local
+    build:
+      context: ..
+      target: dashboard
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 30s
+    environment:
+      CONTROL_URL: http://control:4100
+      CONTROL_ALLOW_INSECURE_HTTP: "true"
+      CONTROL_TOKEN_FILE: /run/secrets/control_token
+    secrets:
+      - control_token
+    ports:
+      - "127.0.0.1:${CLOUD_DASHBOARD_PORT:-3000}:3000"
+    depends_on:
+      control:
+        condition: service_healthy
+    cpus: ${DASHBOARD_CPUS:-1}
+    mem_limit: ${DASHBOARD_MEMORY:-1g}
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+secrets:
+  control_token:
+    file: ./cloud.state/control-token

@@ -1,0 +1,46 @@
+{
+  "name": "rlcraft-v2",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "clients:prepare": "tsx scripts/prepare-fabric-client.ts",
+    "clients:build": "tsx scripts/build-fabric-client.ts",
+    "clients:verify": "tsx scripts/verify-fabric-client.ts",
+    "progress:catalog": "tsx scripts/export-progression.ts",
+    "progress:verify": "tsx scripts/verify-progress.ts",
+    "inputs:catalog": "tsx scripts/export-input-catalog.ts",
+    "inputs:prepare": "tsx scripts/prepare-input-assets.ts",
+    "inputs:verify": "tsx scripts/verify-inputs.ts",
+    "dev": "concurrently -k -n control,dashboard -c cyan,green \"npm run dev -w @rlcraft/control\" \"npm run dev -w @rlcraft/dashboard\"",
+    "build": "npm run typecheck && npm run build -w @rlcraft/dashboard",
+    "typecheck": "tsc --noEmit && npm run typecheck -w @rlcraft/dashboard",
+    "test": "tsx --test tests/*.test.ts",
+    "start": "concurrently -k -n control,dashboard \"npm run start -w @rlcraft/control\" \"npm run start -w @rlcraft/dashboard\"",
+    "server:prepare": "tsx scripts/prepare-server.ts",
+    "train": "tsx scripts/train.ts",
+    "format": "prettier --write apps packages scripts tests examples docs README.md package.json tsconfig.json .github deploy/compose.yml",
+    "format:check": "prettier --check apps packages scripts tests examples docs README.md package.json tsconfig.json .github deploy/compose.yml",
+    "viewer:build": "tsx scripts/build-viewer-plugin.ts",
+    "viewer:verify": "tsx scripts/verify-viewer.ts",
+    "cloud:init": "tsx scripts/cloud-init.ts",
+    "cloud:verify": "tsx scripts/verify-cloud.ts",
+    "worlds:verify": "tsx scripts/verify-worlds.ts",
+    "agents:verify": "tsx scripts/verify-agent-setup.ts",
+    "arenas:verify": "tsx scripts/verify-agent-setup.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "concurrently": "^9.2.0",
+    "prettier": "^3.9.9",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0"
+  }
+}

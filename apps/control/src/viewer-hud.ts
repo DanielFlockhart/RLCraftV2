@@ -1,0 +1,76 @@
+import type { Run } from "@rlcraft/core";
+import { effectiveStepMs } from "@rlcraft/core";
+
+/** Viewer-only projection: no Minecraft commands or agent state changes. */
+export function viewerHudRuns(runs: Run[], now = Date.now()) {
+  const live = new Set(["running", "paused", "pausing", "queued"]);
+  const priority = (r: Run) =>
+    ["running", "pausing"].includes(r.status)
+      ? 0
+      : r.status === "paused"
+        ? 1
+        : r.status === "queued"
+          ? 2
+          : 3;
+  return runs
+    .filter((r) => r.spec.mode === "minecraft")
+    .sort(
+      (a, b) =>
+        priority(a) - priority(b) || b.updatedAt.localeCompare(a.updatedAt),
+    )
+    .slice(0, 16)
+    .map((run) => {
+      const t = run.timing;
+      const terminal = !live.has(run.status);
+      // Recovery marks orphans interrupted at restart; offline time is never runtime.
+      const end =
+        run.status === "interrupted"
+          ? (t?.sampledAt ?? now)
+          : terminal
+            ? Math.min(now, Date.parse(run.updatedAt))
+            : now;
+      const delta = t ? Math.max(0, end - t.sampledAt) : 0;
+      const speed = run.playback?.speed ?? run.spec.speed ?? 1;
+      const ticks =
+        run.playback?.ticksPerGeneration ??
+        t?.ticks ??
+        run.spec.ticksPerEpisode;
+      const seconds = run.playback
+        ? run.playback.generationSeconds
+        : run.spec.generationSeconds;
+      return {
+        id: run.id,
+        stage: run.spec.stage,
+        component: run.spec.component,
+        status: run.status,
+        agents: run.spec.agents,
+        episode: run.episode,
+        episodes: run.spec.episodes,
+        progress: run.progress,
+        tick: t?.tick ?? 0,
+        ticks: run.spec.component === "environment" ? 1 : ticks,
+        speed,
+        effectiveSpeed: run.spec.tickMs / effectiveStepMs(run.spec, speed),
+        generationSeconds: seconds ?? -1,
+        trainingMs:
+          (t?.trainingElapsedMs ?? 0) +
+          (t?.advancing && t.phase === "training" && run.status !== "paused"
+            ? delta
+            : 0),
+        phase: t?.phase ?? "preparing",
+        timingAvailable: !!t,
+        totalMs: t ? t.totalElapsedMs + delta : 0,
+        generationMs: t
+          ? t.generationElapsedMs +
+            (t.advancing && run.status !== "paused" ? delta : 0)
+          : 0,
+        lastGenerationMs: t?.lastGenerationMs ?? -1,
+        targetGenerationMs:
+          seconds !== undefined
+            ? seconds * 1000
+            : (run.spec.component === "environment" ? 1 : ticks) *
+              effectiveStepMs(run.spec, speed),
+        world: run.world?.levelName ?? "External world",
+      };
+    });
+}

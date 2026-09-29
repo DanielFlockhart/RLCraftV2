@@ -1,0 +1,14 @@
+**/node_modules
+**/.next
+**/*.tsbuildinfo
+**/*.log
+**/.env
+**/.env.*
+!.env.example
+.git
+data
+runtime
+deploy/cloud.state
+coverage
+**/.gradle
+clients/fabric-agent/build

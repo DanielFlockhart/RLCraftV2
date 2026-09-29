@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "backends": [
+    {
+      "descriptor": {
+        "id": "sidecar-simulator",
+        "label": "Sidecar simulator example",
+        "description": "Runnable JSON-lines transport demonstration. Does not connect to Minecraft.",
+        "version": "1",
+        "mode": "simulator",
+        "minecraftVersions": ["*"],
+        "inputSupport": {
+          "self.pose": "native",
+          "self.vitals": "native",
+          "self.inventory": "native",
+          "self.controls": "native"
+        },
+        "actions": ["controls"],
+        "lifecycle": {
+          "reset": true,
+          "respawn": false,
+          "teleport": false,
+          "capture": false
+        },
+        "limitations": [
+          "Infrastructure test only; no Minecraft physics, rendering or audio."
+        ]
+      },
+      "stdio": {
+        "command": "node",
+        "args": ["--import", "tsx", "examples/backends/simulator-sidecar.mjs"],
+        "cwd": "../..",
+        "requestTimeoutMs": 5000,
+        "maxMessageBytes": 4194304
+      }
+    },
+    {
+      "descriptor": {
+        "id": "module-simulator",
+        "label": "Module simulator example",
+        "description": "Runnable TypeScript factory demonstration. Does not connect to Minecraft.",
+        "version": "1",
+        "mode": "simulator",
+        "minecraftVersions": ["*"],
+        "inputSupport": {
+          "self.pose": "native",
+          "self.vitals": "native",
+          "self.inventory": "native",
+          "self.controls": "native"
+        },
+        "actions": ["controls"],
+        "lifecycle": {
+          "reset": true,
+          "respawn": false,
+          "teleport": false,
+          "capture": false
+        },
+        "limitations": [
+          "Infrastructure test only; no Minecraft physics, rendering or audio."
+        ]
+      },
+      "module": "simulator-module.ts"
+    }
+  ]
+}
