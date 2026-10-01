@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { Observation } from "@rlcraft/core";
+import type { Observation } from "@mlcraft/core";
 const sample = z
   .object({
     status: z.enum(["ready", "unavailable", "error"]),

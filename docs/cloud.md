@@ -26,7 +26,7 @@ Secrets must have at least 32 non-whitespace characters and stay server-side. Lo
 For a local dashboard controlling a cloud runtime, leave `DASHBOARD_HOST=127.0.0.1`, set `CONTROL_URL` to its private HTTPS origin, and set `CONTROL_TOKEN_FILE` or `CONTROL_TOKEN`. Run only:
 
 ```powershell
-npm.cmd run dev -w @rlcraft/dashboard
+npm.cmd run dev -w @mlcraft/dashboard
 # npm.cmd run train -- movement also uses these connection settings.
 ```
 

@@ -6,7 +6,7 @@ import {
   type ArenaBlueprint,
   type ArenaPoint,
   type ArenaPreset,
-} from "@rlcraft/core";
+} from "@mlcraft/core";
 import { arenaBounds } from "../../../packages/core/src/arenas";
 
 function Coordinates({

@@ -5,7 +5,7 @@ import type {
   Trainer,
   Transition,
   ModelInspection,
-} from "@rlcraft/core";
+} from "@mlcraft/core";
 /** Replace with your model. No random movement or fake learning is used. */
 export class PlaceholderPolicy implements Policy {
   inspectModel(): ModelInspection {

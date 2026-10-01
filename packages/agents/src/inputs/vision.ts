@@ -1,7 +1,7 @@
 import { Vec3 } from "vec3";
 import type { Bot } from "mineflayer";
-import type { AgentInputConfig } from "@rlcraft/core";
-import { isViewerUsername } from "@rlcraft/core";
+import type { AgentInputConfig } from "@mlcraft/core";
+import { isViewerUsername } from "@mlcraft/core";
 import { inputJson } from "./serialize.js";
 import { iterators } from "prismarine-world";
 export function sightRay(bot: Bot, origin: Vec3, dir: Vec3, distance: number) {

@@ -1,7 +1,7 @@
 import { writeFile, mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { format } from "prettier";
-import type { ProgressStep, ProgressRule } from "@rlcraft/core";
+import type { ProgressStep, ProgressRule } from "@mlcraft/core";
 
 // Canonical catalog: edit this list, regenerate JSON + README. Detection rules
 // describe observed facts rather than claiming an item was crafted when gifted.

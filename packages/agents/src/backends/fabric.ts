@@ -20,7 +20,7 @@ import {
   type ArenaPoint,
   type CaptureFrame,
   type ProgressEvidence,
-} from "@rlcraft/core";
+} from "@mlcraft/core";
 import type { BackendContext } from "./contract.js";
 import { parseBackendObservation } from "./observation.js";
 import {
@@ -381,6 +381,9 @@ export class FabricEnvironment implements Environment {
   }
   async feed() {
     return parseRgbFrame(await this.rpc("feed", {}));
+  }
+  async sound(muted?: boolean): Promise<{ muted: boolean }> {
+    return await this.rpc("sound", muted === undefined ? {} : { muted });
   }
   async apply(action: Action) {
     await this.rpc("apply", action);

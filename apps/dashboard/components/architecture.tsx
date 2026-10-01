@@ -8,7 +8,7 @@ import {
   type ModelValue,
   type Run,
   type StageId,
-} from "@rlcraft/core";
+} from "@mlcraft/core";
 import { MinecraftIcon, stageIcons } from "./minecraft-icon";
 
 const count = (value?: number) =>

@@ -1,5 +1,5 @@
 import minecraftData from "minecraft-data";
-import { inputCatalog } from "@rlcraft/core";
+import { inputCatalog } from "@mlcraft/core";
 import botEvents from "../../../core/src/bot-events.json" with { type: "json" };
 export function protocolCatalog(version: string) {
   const data = minecraftData(version);

@@ -10,7 +10,7 @@ import type {
   WorldProfile,
   WorldRunContext,
   WorldSettings,
-} from "@rlcraft/core";
+} from "@mlcraft/core";
 
 const data = minecraftData("1.18.1");
 const resource = z.string().regex(/^minecraft:[a-z0-9_]+$/);

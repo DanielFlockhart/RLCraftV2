@@ -8,7 +8,7 @@ import {
   type AgentInputConfig,
   type AgentInputFrame,
   type AgentState,
-} from "@rlcraft/core";
+} from "@mlcraft/core";
 function download(value: unknown, name: string) {
   const url = URL.createObjectURL(
     new Blob([JSON.stringify(value, null, 2)], { type: "application/json" }),

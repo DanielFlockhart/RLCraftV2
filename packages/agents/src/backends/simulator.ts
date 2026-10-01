@@ -6,8 +6,8 @@ import type {
   ArenaPoint,
   AgentInputConfig,
   CaptureFrame,
-} from "@rlcraft/core";
-import { defaultInputs, inputCatalog } from "@rlcraft/core";
+} from "@mlcraft/core";
+import { defaultInputs, inputCatalog } from "@mlcraft/core";
 import { inputJson, projectFields } from "../inputs/serialize.js";
 export class SimulatorEnvironment implements Environment {
   constructor(

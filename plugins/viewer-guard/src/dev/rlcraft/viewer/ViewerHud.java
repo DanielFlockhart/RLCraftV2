@@ -33,7 +33,7 @@ final class ViewerHud implements Listener {
         Display(Player player) {
             previous = player.getScoreboard();
             board = Bukkit.getScoreboardManager().getNewScoreboard();
-            Objective objective = board.registerNewObjective("rlcraft_hud", "dummy", ChatColor.AQUA + "RLCraft Training");
+            Objective objective = board.registerNewObjective("rlcraft_hud", "dummy", ChatColor.AQUA + "MLCraft Training");
             objective.setDisplaySlot(DisplaySlot.SIDEBAR);
             for (int i = 0; i < lines.length; i++) {
                 String entry = ChatColor.values()[i].toString();
@@ -41,7 +41,7 @@ final class ViewerHud implements Listener {
                 lines[i].addEntry(entry);
                 objective.getScore(entry).setScore(15 - i);
             }
-            bar = Bukkit.createBossBar("RLCraft training", BarColor.BLUE, BarStyle.SOLID);
+            bar = Bukkit.createBossBar("MLCraft training", BarColor.BLUE, BarStyle.SOLID);
             bar.addPlayer(player);
             player.setScoreboard(board);
         }
@@ -137,7 +137,7 @@ final class ViewerHud implements Listener {
             if (run == null) {
                 display.line(2, selections.containsKey(player.getUniqueId()) ? "Selected run unavailable" : "No Minecraft experiments");
                 display.line(4, "/rlcrafthud auto|next|off");
-                display.bar.setTitle(stale ? "RLCraft - waiting for control" : "RLCraft - idle");
+                display.bar.setTitle(stale ? "MLCraft - waiting for control" : "MLCraft - idle");
                 display.bar.setColor(BarColor.WHITE); display.bar.setProgress(0);
                 continue;
             }

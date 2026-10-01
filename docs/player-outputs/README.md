@@ -1,6 +1,6 @@
 # Minecraft player outputs: complete action reference
 
-This is the action-space reference for RLCraftV2: **what a player can attempt to do**, rather than what the player can observe. It covers vanilla **Minecraft Java 1.18.1, protocol 757**, the project's current server baseline. It includes survival actions, every inventory click mode, workstation choices, client UI controls, and separately restricted creative/spectator/operator actions.
+This is the action-space reference for MLCraft: **what a player can attempt to do**, rather than what the player can observe. It covers vanilla **Minecraft Java 1.18.1, protocol 757**, the project's current server baseline. It includes survival actions, every inventory click mode, workstation choices, client UI controls, and separately restricted creative/spectator/operator actions.
 
 **This is a catalog, not a claim that every action is implemented.** The current policy API only exposes seven movement buttons, camera rotation, and digging. Everything else below is a possible extension. A valid action can still fail because of reach, game mode, permissions, cooldown, inventory, collision, world rules, or a changed target.
 
@@ -434,8 +434,8 @@ These are wire messages, **not** 48 independent policy actions: many human actio
 
 - [Minecraft's official controls guide](https://www.minecraft.net/article/minecraft-controls) describes ordinary movement, inventory, attack/place and use controls. It discusses multiple editions; this catalog's baseline is Java.
 - [PrismarineJS minecraft-data versioned registry](https://github.com/PrismarineJS/minecraft-data) supplies the installed 1.18.1 item identifiers and exact protocol schemas. Local resolved data, including its effective version, is recorded in both JSON files.
-- [Mineflayer upstream API](https://github.com/PrismarineJS/mineflayer/blob/master/docs/api.md) and the installed `node_modules/mineflayer/index.d.ts` / `lib/plugins/` are references for potential adapter mappings, not evidence that RLCraft exposes them.
-- [RLCraft shared contract](../../packages/core/src/index.ts), [actual adapter](../../packages/agents/src/backends/mineflayer.ts), and [backend guide](../agent-backends.md) define current support.
+- [Mineflayer upstream API](https://github.com/PrismarineJS/mineflayer/blob/master/docs/api.md) and the installed `node_modules/mineflayer/index.d.ts` / `lib/plugins/` are references for potential adapter mappings, not evidence that MLCraft exposes them.
+- [MLCraft shared contract](../../packages/core/src/index.ts), [actual adapter](../../packages/agents/src/backends/mineflayer.ts), and [backend guide](../agent-backends.md) define current support.
 
 Regenerate the registry JSON and packet table after dependency/version changes:
 

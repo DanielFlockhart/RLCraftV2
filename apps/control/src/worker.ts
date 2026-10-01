@@ -13,12 +13,14 @@ import type {
   PlaybackCommand,
   AgentInputFrame,
   CaptureFrame,
-} from "@rlcraft/core";
+  ArenaPoint,
+} from "@mlcraft/core";
+import { motorDelta, motorReward, motorTarget } from "../../../packages/core/src/motor.js";
 import {
   effectiveStepMs,
   DEFAULT_AGENT_SETUP,
   defaultInputs,
-} from "@rlcraft/core";
+} from "@mlcraft/core";
 import { initialPlayback, changePlayback } from "./playback.js";
 import { trainingPlugins } from "../../../packages/agents/src/registry.js";
 import { prepareStage, reward } from "../../../packages/agents/src/stages.js";
@@ -37,11 +39,13 @@ const memberSetup = (index: number) =>
   };
 let playback = run.playback ?? initialPlayback(spec);
 const policyObservation = (
-  observation: import("@rlcraft/core").Observation,
-): import("@rlcraft/core").PolicyObservation => {
+  observation: import("@mlcraft/core").Observation,
+  target?: ArenaPoint,
+): import("@mlcraft/core").PolicyObservation => {
   if (!observation.inputs)
     throw new Error("Environment must expose selected agent input channels");
-  return { tick: observation.tick, inputs: observation.inputs };
+  return { tick: observation.tick, inputs: observation.inputs,
+    ...(target ? { motor: motorDelta(observation, target) } : {}) };
 };
 let forceEndGeneration = false;
 let playbackJournal: Promise<void> = Promise.resolve();
@@ -120,9 +124,21 @@ process.on(
     username?: string;
     frame?: CaptureFrame;
     requestId?: string;
+    muted?: boolean;
     error?: string;
     command?: PlaybackCommand;
   }) => {
+    if (m.type === "sound-request") {
+      try {
+        const member = members.find((member) => member.state.username === m.username);
+        if (!member?.env.sound) throw new Error("Agent sound control is unavailable");
+        const result = await bounded(member.env.sound(m.muted), 4500);
+        send({ type: "sound", requestId: m.requestId!, muted: result.muted });
+      } catch (error) {
+        send({ type: "sound", requestId: m.requestId!, error: (error as Error).message });
+      }
+      return;
+    }
     if (m.type === "feed-request") {
       try {
         const member = members.find(
@@ -256,12 +272,19 @@ process.on("SIGTERM", () => {
   paused = false;
 });
 const dir = resolve(config.artifactDir, run.id);
+async function saveCheckpoint(checkpoint: Record<string, unknown>) {
+  const path = resolve(dir, "checkpoint.json");
+  const temporary = `${path}.${randomUUID()}.tmp`;
+  await writeFile(temporary, JSON.stringify(checkpoint, null, 2), { flag: "wx" });
+  await rename(temporary, path);
+}
 const plugin = trainingPlugins[spec.stage];
-const trainer = plugin.createTrainer();
+const trainer = plugin.createTrainer(spec);
 const members: Array<{
   state: AgentState;
   env: Environment;
   policy: Policy;
+  target?: ArenaPoint;
 }> = [];
 function reportAgents() {
   send({ type: "agents", agents: members.map((m) => ({ ...m.state })) });
@@ -269,7 +292,7 @@ function reportAgents() {
 let lastModelSample = 0;
 async function reportModels(force = false) {
   if (!force && Date.now() - lastModelSample < 2000) return;
-  const snapshot: import("@rlcraft/core").ModelSnapshot = {
+  const snapshot: import("@mlcraft/core").ModelSnapshot = {
     source: "runtime",
     stage: spec.stage,
     runId: run.id,
@@ -307,6 +330,33 @@ async function updateObservation(member: (typeof members)[number]) {
     food: observation.food,
     inventory: observation.inventory,
     position: observation.position,
+  });
+}
+async function respawnMember(member: (typeof members)[number], index: number) {
+  member.state.status = "dead";
+  reportAgents();
+  send({
+    type: "log",
+    level: "warn",
+    message: `${member.state.username} died; respawning now.`,
+  });
+  await bounded(member.env.apply({}), 5000);
+  if (!member.env.respawn)
+    throw new Error(`Backend cannot respawn ${member.state.username}`);
+  member.state.status = "resetting";
+  reportAgents();
+  await bounded(member.env.respawn(), 20000);
+  if (spec.arena)
+    await bounded(member.env.teleport!(arenaSpawn(spec.arena, index)));
+  await updateObservation(member);
+  if (member.state.health <= 0)
+    throw new Error(`${member.state.username} remained dead after respawn`);
+  member.state.status = paused ? "paused" : "active";
+  reportAgents();
+  send({
+    type: "log",
+    level: "info",
+    message: `${member.state.username} respawned.`,
   });
 }
 const bounded = async <T>(promise: Promise<T>, ms = 30000): Promise<T> => {
@@ -377,7 +427,9 @@ async function main() {
   send({
     type: "log",
     level: "info",
-    message: `${spec.mode} · ${spec.component} · ${spec.stage}. Policy and trainer are placeholders; no learning is performed.`,
+    message: spec.stage === "motor"
+      ? `Minecraft motor session ${spec.motor}: NEAT population evolves from target-reaching rewards.`
+      : `${spec.mode} · ${spec.component} · ${spec.stage}. Policy and trainer are placeholders; no learning is performed.`,
   });
   try {
     const registry = await backendRegistry;
@@ -433,7 +485,7 @@ async function main() {
         reward: 0,
         health: 20,
       };
-      const member = { state, env, policy: plugin.createPolicy(username) };
+      const member = { state, env, policy: plugin.createPolicy(username, spec) };
       members.push(member);
       if (spec.mode === "minecraft") {
         const supported = !!env.watchProgress && config.MC_VERSION === "1.18.1";
@@ -494,6 +546,32 @@ async function main() {
       });
     }
     if (stopping) return;
+    if (spec.preview) {
+      send({
+        type: "log",
+        level: "info",
+        message:
+          "Phase 0 preview ready. Agent is idle; no training steps or checkpoints will run.",
+      });
+      while (!stopping) {
+        await sleep(500);
+        for (const [index, member] of members.entries()) {
+          try {
+            await updateObservation(member);
+            reportAgents();
+          } catch (error) {
+            send({
+              type: "log",
+              level: "warn",
+              message: `Preview observation unavailable: ${(error as Error).message}`,
+            });
+            continue;
+          }
+          if (member.state.health <= 0) await respawnMember(member, index);
+        }
+      }
+      return;
+    }
     if (spec.component === "environment") {
       await prepareStage(spec.stage, 1);
       send({
@@ -523,8 +601,16 @@ async function main() {
         (timingTick >= playback.ticksPerGeneration ||
           (playback.generationSeconds !== undefined &&
             trainingElapsedMs >= playback.generationSeconds * 1000));
+      let lastDeathCheck = 0;
       while (paused && !stopping && !forceEndGeneration && !limitReached()) {
         await reportModels();
+        if (Date.now() - lastDeathCheck >= 500) {
+          for (const [index, member] of members.entries()) {
+            await updateObservation(member);
+            if (member.state.health <= 0) await respawnMember(member, index);
+          }
+          lastDeathCheck = Date.now();
+        }
         await sleep(50);
       }
       generationPausedMs += performance.now() - pauseStarted;
@@ -577,6 +663,8 @@ async function main() {
         for (let i = 0; i < members.length; i++)
           await bounded(members[i].env.teleport!(arenaSpawn(spec.arena, i)));
       for (const m of members) {
+        if (spec.stage === "motor" && spec.motor && spec.arena)
+          m.target = motorTarget(spec.arena, spec.motor, Number(m.state.id.slice(m.state.id.lastIndexOf(":") + 1)), episode, spec.seed);
         await bounded(m.policy.reset(spec.seed + episode));
         m.state.reward = 0;
         m.state.status = "active";
@@ -593,9 +681,10 @@ async function main() {
       send({
         type: "log",
         level: "info",
-        message: `Generation ${episode} ready: ${members.length} agents. Waiting for policy actions (placeholder policies remain idle).`,
+        message: spec.stage === "motor"
+          ? `Generation ${episode} ready: ${members.length} motor agents. Evolved policies are controlling movement.`
+          : `Generation ${episode} ready: ${members.length} agents. Waiting for policy actions (placeholder policies remain idle).`,
       });
-      let allAgentsDead = false;
       for (let tick = 1; !stopping; tick++) {
         await hold();
         if (
@@ -609,17 +698,20 @@ async function main() {
         const began = performance.now();
         const stepMs = effectiveStepMs(spec, playback.speed);
         await Promise.all(
-          members.map(async (m) => {
-            if (m.state.status === "dead") return;
+          members.map(async (m, index) => {
             const before = await bounded(
               Promise.resolve(m.env.observe(m.state.ticks)),
               5000,
             );
+            if (before.health <= 0) {
+              await respawnMember(m, index);
+              return;
+            }
             await recordInputs(m.state.username, "before", before.inputs);
             const action =
               spec.component === "environment"
                 ? {}
-                : await bounded(m.policy.act(policyObservation(before)), 5000);
+                : await bounded(m.policy.act(policyObservation(before, m.target)), 5000);
             await bounded(m.env.apply(action), 10000);
             // The sample interval lets Minecraft physics advance before observation.
             await sleep(stepMs);
@@ -628,7 +720,7 @@ async function main() {
               5000,
             );
             await recordInputs(m.state.username, "after", after.inputs);
-            const value = reward(spec.stage, before, after);
+            const value = m.target ? motorReward(before, after, m.target) : reward(spec.stage, before, after);
             m.state.reward += value;
             m.state.health = after.health;
             m.state.food = after.food;
@@ -637,10 +729,10 @@ async function main() {
             if (spec.component === "pipeline")
               await bounded(
                 trainer.observe(m.state.id, {
-                  observation: policyObservation(before),
+                  observation: policyObservation(before, m.target),
                   action,
                   reward: value,
-                  nextObservation: policyObservation(after),
+                  nextObservation: policyObservation(after, m.target),
                   done:
                     tick >= playback.ticksPerGeneration ||
                     (playback.generationSeconds !== undefined &&
@@ -652,19 +744,11 @@ async function main() {
                 5000,
               );
             if (after.health <= 0) {
-              m.state.status = "dead";
-              await bounded(m.env.apply({}));
-              send({
-                type: "log",
-                level: "warn",
-                message: `${m.state.username} died in generation ${episode}; respawn is scheduled for the next generation.`,
-              });
-              reportAgents();
+              await respawnMember(m, index);
             }
           }),
         );
-        sampleSteps += members.filter((m) => m.state.status !== "dead").length;
-        allAgentsDead = members.every((m) => m.state.status === "dead");
+        sampleSteps += members.length;
         const stepDuration = performance.now() - began;
         trainingElapsedMs += stepDuration;
         tickTotal += stepDuration;
@@ -675,8 +759,7 @@ async function main() {
           tick >= playback.ticksPerGeneration ||
           (playback.generationSeconds !== undefined &&
             trainingElapsedMs >= playback.generationSeconds * 1000) ||
-          forceEndGeneration ||
-          allAgentsDead;
+          forceEndGeneration;
         if (playback.manual && playback.manual.kind !== "generation") {
           playback.manual.remaining -=
             playback.manual.kind === "steps" ? 1 : stepDuration / 1000;
@@ -733,6 +816,15 @@ async function main() {
           spec.component === "pipeline"
             ? await bounded(trainer.endEpisode(episode))
             : {};
+        if (spec.stage === "motor")
+          await saveCheckpoint({
+            ...(await bounded(trainer.checkpoint())),
+            runId: run.id,
+            stage: spec.stage,
+            seed: spec.seed,
+            episode,
+            createdAt: new Date().toISOString(),
+          });
         await reportModels(true);
         await appendFile(
           resolve(dir, "episodes.jsonl"),
@@ -741,11 +833,7 @@ async function main() {
             steps: timingTick,
             trainingElapsedMs,
             playback: structuredClone(playback),
-            endedBy: forceEndGeneration
-              ? "manual"
-              : allAgentsDead
-                ? "agents-dead"
-                : "limit",
+            endedBy: forceEndGeneration ? "manual" : "limit",
             durationMs:
               performance.now() - generationStarted - generationPausedMs,
             totalElapsedMs: performance.now() - started,
@@ -771,7 +859,7 @@ async function main() {
         send({
           type: "log",
           level: "info",
-          message: `Generation ${episode} finished after ${timingTick} steps${allAgentsDead ? " (all agents died)" : ""}.`,
+          message: `Generation ${episode} finished after ${timingTick} steps.`,
         });
       }
     }
@@ -780,19 +868,26 @@ async function main() {
       timingPhase = "finishing";
       timingAdvancing = false;
       reportTiming();
-      const checkpoint = {
+      const checkpoint: Record<string, unknown> = {
         ...(await bounded(trainer.checkpoint())),
         runId: run.id,
         stage: spec.stage,
         seed: spec.seed,
         createdAt: new Date().toISOString(),
       };
-      await writeFile(
-        resolve(dir, "checkpoint.json"),
-        JSON.stringify(checkpoint, null, 2),
-      );
+      await saveCheckpoint(checkpoint);
       await reportModels(true);
-      send({ type: "done", checkpoint });
+      // The full NEAT population is stored on disk. Keep IPC completion small and
+      // wait for the send callback before the worker disconnects.
+      await new Promise<void>((resolve, reject) => {
+        if (!process.connected) return reject(new Error("Control service disconnected before completion"));
+        process.send?.({ type: "done", checkpoint: {
+          kind: checkpoint.kind,
+          generation: checkpoint.generation,
+          bestFitness: checkpoint.bestFitness,
+          runId: run.id,
+        } }, (error) => error ? reject(error) : resolve());
+      });
     }
   } finally {
     delete playback.manual;

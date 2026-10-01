@@ -17,8 +17,8 @@ import type {
   Environment,
   Observation,
   RunSpec,
-} from "@rlcraft/core";
-import { defaultInputs, DEFAULT_AGENT_SETUP } from "@rlcraft/core";
+} from "@mlcraft/core";
+import { defaultInputs, DEFAULT_AGENT_SETUP } from "@mlcraft/core";
 const root = fileURLToPath(new URL("../", import.meta.url));
 const spec: RunSpec = {
   mode: "simulator",

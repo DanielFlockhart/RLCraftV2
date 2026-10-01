@@ -52,6 +52,7 @@ export interface AgentInputFrame {
 export interface PolicyObservation {
   tick: number;
   inputs: AgentInputFrame;
+  motor?: { targetDx: number; targetDy: number; targetDz: number };
 }
 export interface CaptureFrame {
   kind: "rgb" | "pcm";

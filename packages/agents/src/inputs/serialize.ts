@@ -1,4 +1,4 @@
-import type { InputValue } from "@rlcraft/core";
+import type { InputValue } from "@mlcraft/core";
 export function inputJson(
   value: unknown,
   depth = 0,

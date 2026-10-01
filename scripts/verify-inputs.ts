@@ -5,13 +5,13 @@ import { createServer } from "node:net";
 import { config, root } from "../apps/control/src/config.js";
 import { createApp } from "../apps/control/src/app.js";
 import { Store } from "../apps/control/src/store.js";
-import { loadBackendRegistry } from "@rlcraft/agents/backends";
+import { loadBackendRegistry } from "@mlcraft/agents/backends";
 import {
   defaultInputs,
   type AgentInputConfig,
   type AgentInputFrame,
   type Environment,
-} from "@rlcraft/core";
+} from "@mlcraft/core";
 const listener = createServer();
 await new Promise<void>((yes) => listener.listen(0, "127.0.0.1", yes));
 const address = listener.address();

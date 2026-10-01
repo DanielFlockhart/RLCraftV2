@@ -1,5 +1,5 @@
 "use client";
-import { DEFAULT_TRAINING_RULES, type TrainingRules } from "@rlcraft/core";
+import { DEFAULT_TRAINING_RULES, type TrainingRules } from "@mlcraft/core";
 import { MinecraftSelect } from "./minecraft-select";
 const agentRules = [
   ["keepInventory", "Keep inventory on death"],

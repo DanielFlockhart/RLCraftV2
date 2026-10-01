@@ -5,7 +5,7 @@ import type {
   ProgressRecord,
   ProgressAgent,
   ProgressSummary,
-} from "@rlcraft/core";
+} from "@mlcraft/core";
 import type {
   AgentState,
   HostMetric,
@@ -14,7 +14,7 @@ import type {
   Run,
   AgentPreset,
   ArenaPreset,
-} from "@rlcraft/core";
+} from "@mlcraft/core";
 export class Store {
   private db: DatabaseSync;
   readonly archive: ArchiveQueue;

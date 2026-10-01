@@ -1,5 +1,5 @@
 "use client";
-import type { ArchiveState } from "@rlcraft/core";
+import type { ArchiveState } from "@mlcraft/core";
 export function ArchiveStatus({
   state,
   disabled,

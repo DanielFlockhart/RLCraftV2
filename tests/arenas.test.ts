@@ -5,7 +5,7 @@ import {
   DEFAULT_AGENT_SETUP,
   type RunSpec,
   type Run,
-} from "@rlcraft/core";
+} from "@mlcraft/core";
 import {
   arenaSpecSchema,
   arenaBlueprintSchema,

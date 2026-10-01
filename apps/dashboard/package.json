@@ -1,5 +1,5 @@
 {
-  "name": "@rlcraft/dashboard",
+  "name": "@mlcraft/dashboard",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@rlcraft/core": "*",
+    "@mlcraft/core": "*",
     "next": "^16.0.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",

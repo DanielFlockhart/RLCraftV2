@@ -1,4 +1,4 @@
-import type { ArchiveState } from "@rlcraft/core";
+import type { ArchiveState } from "@mlcraft/core";
 import type { ArchiveEvent, ArchiveQueue } from "./archive-queue.js";
 
 export interface ArchiveSink {

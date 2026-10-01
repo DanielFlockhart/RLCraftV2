@@ -43,7 +43,7 @@ For models exposing `layers`, `getConfig()`, `getClassName()`, `countParams()`, 
 and `trainableWeights[].shape`, the supplied adapter walks native objects:
 
 ```ts
-import { inspectModuleTree } from "@rlcraft/agents";
+import { inspectModuleTree } from "@mlcraft/agents";
 
 inspectModel() {
   // These are your real objects, not duplicated diagram settings.

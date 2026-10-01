@@ -4,8 +4,8 @@ import type {
   BackendDescriptor,
   Environment,
   Observation,
-} from "@rlcraft/core";
-import { inputCatalog } from "@rlcraft/core";
+} from "@mlcraft/core";
+import { inputCatalog } from "@mlcraft/core";
 import { projectFields } from "../inputs/serialize.js";
 
 /** Enforce input selection at the common boundary, including third-party backends. */
@@ -16,6 +16,7 @@ export function selectedEnvironment(
 ): Environment {
   return {
     ...(environment.feed ? { feed: () => environment.feed!() } : {}),
+    ...(environment.sound ? { sound: (muted?: boolean) => environment.sound!(muted) } : {}),
     ...(environment.watchProgress
       ? {
           watchProgress: (

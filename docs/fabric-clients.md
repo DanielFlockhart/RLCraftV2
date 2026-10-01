@@ -105,7 +105,7 @@ An optional Docker target, **`control-render`**, installs Xvfb and Mesa/display
 dependencies and starts control under a virtual display. Build with:
 
 ```sh
-docker build --target control-render -t rlcraft-control-render .
+docker build --target control-render -t mlcraft-control-render .
 ```
 
 This supplies a software-rendering fallback, not a benchmarked GPU deployment.

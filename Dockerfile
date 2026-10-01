@@ -17,7 +17,7 @@ EXPOSE 4100 25565
 CMD ["node", "--import", "tsx", "apps/control/src/index.ts"]
 
 FROM dependencies AS dashboard
-RUN npm run build -w @rlcraft/dashboard
+RUN npm run build -w @mlcraft/dashboard
 ENV DASHBOARD_HOST=0.0.0.0
 EXPOSE 3000
 CMD ["node", "--import", "tsx", "scripts/dashboard.ts", "start"]

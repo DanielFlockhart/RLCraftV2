@@ -1,4 +1,4 @@
-import type { Observation, StageId } from "@rlcraft/core";
+import type { Observation, StageId } from "@mlcraft/core";
 const count = (o: Observation, pattern: RegExp) =>
   Object.entries(o.inventory).reduce(
     (n, [name, amount]) => n + (pattern.test(name) ? amount : 0),

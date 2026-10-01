@@ -1,7 +1,7 @@
-name: rlcraft-v2
+name: mlcraft
 services:
   control:
-    image: rlcraft-v2-control:local
+    image: mlcraft-control:local
     build:
       context: ..
       target: control
@@ -40,7 +40,7 @@ services:
       start_period: 15s
       retries: 3
   dashboard:
-    image: rlcraft-v2-dashboard:local
+    image: mlcraft-dashboard:local
     build:
       context: ..
       target: dashboard

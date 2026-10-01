@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import { Plus, RefreshCw } from "lucide-react";
-import type { WorldCatalog, WorldSettings } from "@rlcraft/core";
+import type { WorldCatalog, WorldSettings } from "@mlcraft/core";
 import { MinecraftIcon, worldIcons } from "./minecraft-icon";
 import { MinecraftSelect, type MinecraftOption } from "./minecraft-select";
 const terrainOptions: MinecraftOption[] = [

@@ -7,11 +7,11 @@ import type {
   ArenaPoint,
   AgentInputConfig,
   CaptureFrame,
-} from "@rlcraft/core";
-import { defaultInputs, inputCatalog } from "@rlcraft/core";
+} from "@mlcraft/core";
+import { defaultInputs, inputCatalog } from "@mlcraft/core";
 import { MinecraftInputs } from "../inputs/minecraft.js";
 import { MinecraftProgress } from "../progression.js";
-import type { ProgressEvidence } from "@rlcraft/core";
+import type { ProgressEvidence } from "@mlcraft/core";
 export class MinecraftEnvironment implements Environment {
   private progression?: MinecraftProgress;
   private progressListener?: (evidence: ProgressEvidence) => void;

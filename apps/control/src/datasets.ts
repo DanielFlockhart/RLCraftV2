@@ -19,7 +19,7 @@ import type {
   DatasetSnapshot,
   DatasetExamples,
   GoalSelectionExample,
-} from "@rlcraft/core";
+} from "@mlcraft/core";
 
 // Only trusted, repository-owned scripts are executable. Add future generators here.
 export const datasetRegistry: (DatasetGenerator & { script: string })[] = [

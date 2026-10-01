@@ -17,7 +17,7 @@ import type {
   GoalModelSnapshot,
   GoalPrediction,
   GoalEpochMetric,
-} from "@rlcraft/core";
+} from "@mlcraft/core";
 import { DatasetManager } from "./datasets.js";
 
 export const goalTrainingParameters = z

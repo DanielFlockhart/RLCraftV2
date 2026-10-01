@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { resolve } from "node:path";
-import type { PreparationState } from "@rlcraft/core";
+import type { PreparationState } from "@mlcraft/core";
 import { config, root } from "./config.js";
 import { Store } from "./store.js";
 export class ServerPreparation {

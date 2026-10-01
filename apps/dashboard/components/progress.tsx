@@ -7,7 +7,7 @@ import {
   Download,
   Search,
 } from "lucide-react";
-import type { ProgressSnapshot, Run } from "@rlcraft/core";
+import type { ProgressSnapshot, Run } from "@mlcraft/core";
 import { MinecraftIcon } from "./minecraft-icon";
 import { progressGroupIcons, progressIcons } from "./progress-icons";
 

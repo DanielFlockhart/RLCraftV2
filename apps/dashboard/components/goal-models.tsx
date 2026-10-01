@@ -18,7 +18,7 @@ import type {
   GoalSelectionExample,
   DatasetSplit,
   GoalModelJob,
-} from "@rlcraft/core";
+} from "@mlcraft/core";
 import { PlayerInventory } from "./player-inventory";
 
 const percentage = (value: number | null | undefined) =>

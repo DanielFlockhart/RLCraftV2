@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { Vec3 } from "vec3";
 import type { Bot } from "mineflayer";
-import { defaultInputs, type AgentInputConfig } from "@rlcraft/core";
+import { defaultInputs, type AgentInputConfig } from "@mlcraft/core";
 import { MinecraftInputs } from "../packages/agents/src/inputs/minecraft.js";
 import { InputEvents } from "../packages/agents/src/inputs/events.js";
 import { inputJson } from "../packages/agents/src/inputs/serialize.js";

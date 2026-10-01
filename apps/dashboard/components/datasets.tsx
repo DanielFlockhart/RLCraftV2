@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import type { DatasetSnapshot, DatasetJob } from "@rlcraft/core";
+import type { DatasetSnapshot, DatasetJob } from "@mlcraft/core";
 
 export function Datasets({ online }: { online: boolean }) {
   const [data, setData] = useState<DatasetSnapshot>();

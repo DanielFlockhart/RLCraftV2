@@ -1,6 +1,8 @@
 package dev.rlcraft.agent.mixin;
 import dev.rlcraft.agent.AgentClient;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gui.screen.DeathScreen;
+import net.minecraft.client.gui.screen.Screen;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -9,4 +11,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class MinecraftClientMixin {
     @Inject(method="tick", at=@At("HEAD")) private void agentTick(CallbackInfo info) { if (AgentClient.INSTANCE != null) AgentClient.INSTANCE.tick(); }
     @Inject(method="render", at=@At("TAIL")) private void agentFrame(boolean tick, CallbackInfo info) { if (AgentClient.INSTANCE != null) AgentClient.INSTANCE.rendered(); }
+    @Inject(method="setScreen", at=@At("HEAD"), cancellable=true) private void agentScreen(Screen screen, CallbackInfo info) {
+        if (screen instanceof DeathScreen && AgentClient.INSTANCE != null && AgentClient.INSTANCE.suppressDeathScreen()) info.cancel();
+    }
 }

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import type { Run } from "@rlcraft/core";
+import type { Run } from "@mlcraft/core";
 import { viewerHudRuns } from "../apps/control/src/viewer-hud.js";
 
 const run: Run = {

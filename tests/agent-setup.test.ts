@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { DEFAULT_AGENT_SETUP } from "@rlcraft/core";
-import { SimulatorEnvironment } from "@rlcraft/agents";
+import { DEFAULT_AGENT_SETUP } from "@mlcraft/core";
+import { SimulatorEnvironment } from "@mlcraft/agents";
 import { agentSetupSchema } from "../apps/control/src/agent-setup.js";
 test("starting inventories reject nonexistent items, duplicate slots, overflowing stacks and injected values", () => {
   for (const items of [

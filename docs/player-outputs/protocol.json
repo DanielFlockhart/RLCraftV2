@@ -14,7 +14,7 @@
   "direction": "serverbound",
   "state": "play",
   "count": 48,
-  "note": "Schemas are versioned wire formats, not permission grants or RLCraft action capabilities. Conditional fields retain their original switch/option definitions.",
+  "note": "Schemas are versioned wire formats, not permission grants or MLCraft action capabilities. Conditional fields retain their original switch/option definitions.",
   "baselineModeReference": {
     "windowClick": {
       "0": "pickup",

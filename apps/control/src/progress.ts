@@ -3,7 +3,7 @@ import type {
   ProgressSnapshot,
   ProgressRecord,
   ProgressAgent,
-} from "@rlcraft/core";
+} from "@mlcraft/core";
 import json from "../../../packages/core/src/progression-catalog.json" with { type: "json" };
 import type { Store } from "./store.js";
 export const progressionCatalog = json as ProgressSnapshot["catalog"];

@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import type { Run } from "@rlcraft/core";
+import type { Run } from "@mlcraft/core";
 import { config, root } from "./config.js";
 
 /** Current execution boundary: workers remain colocated with the control runtime. */

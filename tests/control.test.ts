@@ -5,7 +5,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-const dir = await mkdtemp(join(tmpdir(), "rlcraft-v2-test-"));
+const dir = await mkdtemp(join(tmpdir(), "mlcraft-test-"));
 process.env.DATA_DIR = dir;
 process.env.SERVER_DIR = join(dir, "server");
 process.env.ARTIFACT_DIR = join(dir, "separate-artifact-volume");
@@ -17,7 +17,7 @@ process.env.AGENT_BACKENDS_FILE = fileURLToPath(
 const { createApp } = await import("../apps/control/src/app.js");
 const { Store } = await import("../apps/control/src/store.js");
 const { token } = await import("../apps/control/src/config.js");
-const { DEFAULT_AGENT_SETUP } = await import("@rlcraft/core");
+const { DEFAULT_AGENT_SETUP } = await import("@mlcraft/core");
 const { app, store, server, worlds } = createApp(
   new Store(join(dir, "test.sqlite")),
 );
@@ -386,8 +386,8 @@ test("model endpoints inspect registered factories and persist actual runtime sn
   }
 });
 test("selected inputs reach agents and recordings without leaking unselected fields", async () => {
-  const { defaultInputs } = await import("@rlcraft/core");
-  const profile: import("@rlcraft/core").AgentInputConfig =
+  const { defaultInputs } = await import("@mlcraft/core");
+  const profile: import("@mlcraft/core").AgentInputConfig =
     structuredClone(defaultInputs);
   for (const channel of Object.values(profile.channels))
     channel.enabled = false;
@@ -758,6 +758,15 @@ test("authorization and invalid input cannot launch workers", async () => {
   );
   assert.equal((await post("/runs", { ...base, agents: 5 })).statusCode, 400);
   assert.equal((await app.inject({ url: "/health" })).statusCode, 200);
+});
+test("motor sessions require a prepared superflat world and a selected curriculum", async () => {
+  const world = await app.inject({ url: "/phase3a/world", headers });
+  assert.equal(world.statusCode, 200);
+  assert.equal(world.json().ready, false);
+  assert.equal((await post("/runs", { ...base, stage: "motor" })).statusCode, 400);
+  const session = await post("/phase3a/sessions", { session: "M0", agents: 1, episodes: 1, ticksPerEpisode: 1 });
+  assert.equal(session.statusCode, 400);
+  assert.match(session.json().error, /Prepare the server first/);
 });
 test("default Minecraft admission requires reset support and simulator players cannot be watched", async () => {
   const absentServer = await post("/runs", { stage: "movement", agents: 1 });
@@ -1146,7 +1155,7 @@ test("preparation is supervised, excludes live operations and reports failure wi
   assert.deepEqual(await worlds.context(), beforeWorld);
 });
 test("arena preset API validates geometry, preserves submitted blueprints, and requires managed plugin readiness for runs", async () => {
-  const { DEFAULT_ARENA_SPEC } = await import("@rlcraft/core");
+  const { DEFAULT_ARENA_SPEC } = await import("@mlcraft/core");
   const created = await post("/arena-presets", {
     name: "Training cage",
     blueprint: DEFAULT_ARENA_SPEC.blueprint,

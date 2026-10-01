@@ -6,7 +6,7 @@ import type {
   Policy,
   Trainer,
   StageId,
-} from "@rlcraft/core";
+} from "@mlcraft/core";
 
 // An adapter reads these methods from the actual framework object, without copying weights.
 export interface InspectableModule {

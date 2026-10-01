@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { RunSpec, RunPlayback, PlaybackCommand } from "@rlcraft/core";
+import type { RunSpec, RunPlayback, PlaybackCommand } from "@mlcraft/core";
 const speed = z.number().min(0.25).max(8);
 const seconds = z.number().min(0.1).max(86400);
 const steps = z.number().int().min(1).max(100000);

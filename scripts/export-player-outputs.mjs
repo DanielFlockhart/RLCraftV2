@@ -121,7 +121,7 @@ await save("protocol.json", {
   direction: "serverbound",
   state: "play",
   count: packets.length,
-  note: "Schemas are versioned wire formats, not permission grants or RLCraft action capabilities. Conditional fields retain their original switch/option definitions.",
+  note: "Schemas are versioned wire formats, not permission grants or MLCraft action capabilities. Conditional fields retain their original switch/option definitions.",
   baselineModeReference:
     version === "1.18.1"
       ? {

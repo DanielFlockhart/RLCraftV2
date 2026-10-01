@@ -1,6 +1,8 @@
-# RLCraft V2
+# MLCraft
 
 A local control room for Minecraft agent experiments. Next.js + Tailwind dashboard, TypeScript/Fastify control service, isolated run processes, SQLite history, structured logs and performance charts. The AI policy and trainer are explicit placeholders, ready for your implementations.
+
+The Paper plugin's existing `rlcraft*` commands and saved world filenames remain compatible with prepared servers and worlds from earlier versions.
 
 ## Start
 

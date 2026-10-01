@@ -10,7 +10,7 @@ import {
   type InputSample,
   type CaptureFrame,
   type InputValue,
-} from "@rlcraft/core";
+} from "@mlcraft/core";
 import botEvents from "../../../core/src/bot-events.json" with { type: "json" };
 import { InputEvents } from "./events.js";
 import { inputJson, projectFields } from "./serialize.js";

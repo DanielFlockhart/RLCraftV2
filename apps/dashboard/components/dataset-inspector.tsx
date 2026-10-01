@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, ArrowRight, Shuffle, Copy, Check } from "lucide-react";
-import type { DatasetExamples, DatasetSplit } from "@rlcraft/core";
+import type { DatasetExamples, DatasetSplit } from "@mlcraft/core";
 import {
   PlayerInventory,
   itemName,

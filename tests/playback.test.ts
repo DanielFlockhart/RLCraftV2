@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { effectiveStepMs, type RunSpec } from "@rlcraft/core";
+import { effectiveStepMs, type RunSpec } from "@mlcraft/core";
 import {
   changePlayback,
   initialPlayback,

@@ -5,7 +5,7 @@ import type {
   BackendDescriptor,
   Environment,
   Mode,
-} from "@rlcraft/core";
+} from "@mlcraft/core";
 
 /** Policy code receives core PolicyObservation, never a backend-specific client. */
 export interface BackendContext {
@@ -19,7 +19,7 @@ export interface BackendContext {
     auth: "offline" | "microsoft";
   };
   inputs: AgentInputConfig;
-  render?: import("@rlcraft/core").RenderSettings;
+  render?: import("@mlcraft/core").RenderSettings;
   assetDirectory: string;
   managed: {
     applySetup(setup: AgentSetup): Promise<void>;

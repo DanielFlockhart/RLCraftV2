@@ -1,7 +1,7 @@
 "use client";
 import Image from "next/image";
 import { useId } from "react";
-import type { StageId, WorldSettings } from "@rlcraft/core";
+import type { StageId, WorldSettings } from "@mlcraft/core";
 
 const blocks = {
   grass_block: ["grass_block_top", "grass_block_side", "grass_block_side"],
@@ -72,6 +72,7 @@ export const worldIcons: Record<WorldSettings["type"], MinecraftAsset> = {
 };
 export const stageIcons: Record<StageId, MinecraftAsset> = {
   movement: "leather_boots",
+  motor: "stick",
   wood_collection: "iron_axe",
   block_collection: "iron_pickaxe",
   survival: "apple",

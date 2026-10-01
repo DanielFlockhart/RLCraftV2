@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { DEFAULT_TRAINING_RULES, type Run } from "@rlcraft/core";
+import { DEFAULT_TRAINING_RULES, type Run } from "@mlcraft/core";
 import {
   trainingRulesSchema,
   validateRulesCompatibility,

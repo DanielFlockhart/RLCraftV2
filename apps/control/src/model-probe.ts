@@ -1,12 +1,13 @@
-import { trainingPlugins, inspectModels } from "@rlcraft/agents";
-import { stages, type StageId, type ModelSnapshot } from "@rlcraft/core";
+import { trainingPlugins, inspectModels } from "@mlcraft/agents";
+import { stages, type StageId, type ModelSnapshot, type RunSpec } from "@mlcraft/core";
 
 // Fresh process imports the current registry; no environments, bots, or training are started.
 const stage = process.argv[2] as StageId;
 if (!stages.some((item) => item.id === stage)) throw new Error("Unknown stage");
 const plugin = trainingPlugins[stage];
-const policy = plugin.createPolicy("architecture-preview");
-const trainer = plugin.createTrainer();
+const spec: RunSpec = { stage, ...(stage === "motor" ? { motor: "M0" as const } : {}), mode: "simulator", component: "pipeline", agents: 1, episodes: 1, ticksPerEpisode: 1, tickMs: 100, seed: 42 };
+const trainer = plugin.createTrainer(spec);
+const policy = plugin.createPolicy("rl_preview_0", spec);
 try {
   const snapshot: ModelSnapshot = {
     source: "configured",

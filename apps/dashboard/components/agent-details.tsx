@@ -2,20 +2,23 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, ArrowUpRight } from "lucide-react";
-import type { AgentState, LogEntry, Run } from "@rlcraft/core";
+import type { AgentState, LogEntry, Run } from "@mlcraft/core";
 import { AgentFeed } from "./fabric";
 import { LiveInputs } from "./inputs";
 import { Badge, format } from "./telemetry";
 import { MinecraftIcon, stageIcons } from "./minecraft-icon";
+import { LiveGoalPrediction } from "./live-goal-prediction";
 
 type Details = { run: Run; agents: AgentState[]; logs: LogEntry[] };
 
 export function AgentDetails({
   runId,
   username,
+  embedded = false,
 }: {
   runId: string;
   username: string;
+  embedded?: boolean;
 }) {
   const [detail, setDetail] = useState<Details>();
   const [online, setOnline] = useState(false);
@@ -68,10 +71,12 @@ export function AgentDetails({
   const connected =
     !!agent && ["active", "paused", "dead", "resetting"].includes(agent.status);
   return (
-    <main className="agent-detail-page">
-      <Link className="agent-back-link" href="/?view=agents">
-        <ArrowLeft size={16} /> Back to agent fleet
-      </Link>
+    <div className={embedded ? "agent-detail-embedded" : "agent-detail-page"}>
+      {!embedded && (
+        <Link className="agent-back-link" href="/?view=agents">
+          <ArrowLeft size={16} /> Back to agent fleet
+        </Link>
+      )}
       <header className="agent-detail-heading">
         <MinecraftIcon
           name={run ? stageIcons[run.spec.stage] : "compass"}
@@ -81,9 +86,11 @@ export function AgentDetails({
           <p>Agent inspector</p>
           <h1>{username}</h1>
           <p>
-            {run
-              ? `${run.spec.stage} · ${run.backend?.descriptor.label ?? run.spec.backend ?? run.spec.mode}`
-              : "Loading run…"}{" "}
+            {run?.spec.preview
+              ? "Phase 0 live preview"
+              : run
+                ? `${run.spec.stage} · ${run.backend?.descriptor.label ?? run.spec.backend ?? run.spec.mode}`
+                : "Loading run…"}{" "}
             · {runId.slice(0, 8)}
           </p>
         </div>
@@ -155,26 +162,30 @@ export function AgentDetails({
                         .join(", ")
                     : "Unavailable"}
                 </dd>
-                <dt>Training ticks</dt>
-                <dd>{agent.ticks.toLocaleString()}</dd>
-                <dt>Reward</dt>
-                <dd>{format(agent.reward, 3)}</dd>
-                <dt>Generation</dt>
-                <dd>
-                  {run.episode} / {run.spec.episodes}
-                </dd>
-                <dt>Generation step</dt>
-                <dd>
-                  {run.timing
-                    ? `${run.timing.tick} / ${run.timing.ticks}`
-                    : "Unavailable"}
-                </dd>
-                <dt>Active training time</dt>
-                <dd>
-                  {run.timing?.trainingElapsedMs === undefined
-                    ? "Unavailable"
-                    : `${format(run.timing.trainingElapsedMs / 1000)}s`}
-                </dd>
+                {!run.spec.preview && (
+                  <>
+                    <dt>Training ticks</dt>
+                    <dd>{agent.ticks.toLocaleString()}</dd>
+                    <dt>Reward</dt>
+                    <dd>{format(agent.reward, 3)}</dd>
+                    <dt>Generation</dt>
+                    <dd>
+                      {run.episode} / {run.spec.episodes}
+                    </dd>
+                    <dt>Generation step</dt>
+                    <dd>
+                      {run.timing
+                        ? `${run.timing.tick} / ${run.timing.ticks}`
+                        : "Unavailable"}
+                    </dd>
+                    <dt>Active training time</dt>
+                    <dd>
+                      {run.timing?.trainingElapsedMs === undefined
+                        ? "Unavailable"
+                        : `${format(run.timing.trainingElapsedMs / 1000)}s`}
+                    </dd>
+                  </>
+                )}
                 <dt>Run status</dt>
                 <dd>
                   <Badge status={run.status} />
@@ -203,6 +214,7 @@ export function AgentDetails({
               </details>
             </section>
           </div>
+          <LiveGoalPrediction agent={agent} online={online} />
           <section className="agent-detail-inputs">
             <h2>Live player inputs</h2>
             <p className="muted">
@@ -216,39 +228,42 @@ export function AgentDetails({
               embedded
             />
           </section>
-          <section className="panel agent-detail-card">
-            <h2>Run context</h2>
-            <p>
-              Stage {run.spec.stage} · seed {run.spec.seed} · {run.spec.tickMs}
-              ms base cadence · {run.spec.agents} agent
-              {run.spec.agents === 1 ? "" : "s"}
-            </p>
-            <Link
-              className="agent-back-link"
-              href={`/?view=training&run=${encodeURIComponent(runId)}`}
-            >
-              Open training run <ArrowUpRight size={14} />
-            </Link>
-            <details className="agent-raw-state">
-              <summary>Recent run events</summary>
-              {detail.logs.length ? (
-                <ul className="agent-event-list">
-                  {detail.logs.slice(-20).map((log, index) => (
-                    <li key={log.id ?? index}>
-                      <time>{new Date(log.at).toLocaleTimeString()}</time>
-                      <span>
-                        {log.level} · {log.source} · {log.message}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="muted">No recorded events.</p>
-              )}
-            </details>
-          </section>
+          {!embedded && (
+            <section className="panel agent-detail-card">
+              <h2>Run context</h2>
+              <p>
+                Stage {run.spec.stage} · seed {run.spec.seed} ·{" "}
+                {run.spec.tickMs}
+                ms base cadence · {run.spec.agents} agent
+                {run.spec.agents === 1 ? "" : "s"}
+              </p>
+              <Link
+                className="agent-back-link"
+                href={`/?view=training&run=${encodeURIComponent(runId)}`}
+              >
+                Open training run <ArrowUpRight size={14} />
+              </Link>
+              <details className="agent-raw-state">
+                <summary>Recent run events</summary>
+                {detail.logs.length ? (
+                  <ul className="agent-event-list">
+                    {detail.logs.slice(-20).map((log, index) => (
+                      <li key={log.id ?? index}>
+                        <time>{new Date(log.at).toLocaleTimeString()}</time>
+                        <span>
+                          {log.level} · {log.source} · {log.message}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="muted">No recorded events.</p>
+                )}
+              </details>
+            </section>
+          )}
         </>
       )}
-    </main>
+    </div>
   );
 }

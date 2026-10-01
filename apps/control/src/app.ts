@@ -10,7 +10,7 @@ import {
   DEFAULT_AGENT_SETUP,
   DEFAULT_TRAINING_RULES,
   type Snapshot,
-} from "@rlcraft/core";
+} from "@mlcraft/core";
 import {
   trainingRulesSchema,
   validateRulesCompatibility,
@@ -41,7 +41,7 @@ import {
   captureSchema,
   defaultInputConfig,
 } from "./inputs.js";
-import { inputCatalog } from "@rlcraft/core";
+import { inputCatalog } from "@mlcraft/core";
 import { protocolCatalog } from "../../../packages/agents/src/inputs/catalog.js";
 import { playbackSchema } from "./playback.js";
 import { backendRegistry } from "./backends.js";
@@ -51,6 +51,7 @@ import {
   renderSchema,
 } from "../../../packages/runtime/src/fabric.js";
 import { backendIdSchema } from "../../../packages/agents/src/backends/registry.js";
+import { motorArena, motorSessions } from "../../../packages/core/src/motor.js";
 import {
   arenaSpecSchema,
   arenaPresetSchema,
@@ -62,11 +63,14 @@ export const runSchema = z
   .object({
     stage: z.enum([
       "movement",
+      "motor",
       "wood_collection",
       "block_collection",
       "survival",
       "pvp",
     ]),
+    motor: z.enum(["M0", "M1", "M2", "M3", "M4", "M5", "M6", "M7", "M8"]).optional(),
+    motorSource: z.uuid().optional(),
     mode: z.enum(["simulator", "minecraft"]).default("minecraft"),
     backend: backendIdSchema.optional(),
     render: renderSchema.optional(),
@@ -81,12 +85,21 @@ export const runSchema = z
     speed: z.number().min(0.25).max(8).default(1),
     generationSeconds: z.number().min(0.1).max(86400).optional(),
     startPaused: z.boolean().default(false),
+    preview: z.boolean().optional(),
     setup: agentSetupSchema.optional(),
     inputs: inputConfigSchema.optional(),
     arena: arenaSpecSchema.optional(),
     rules: trainingRulesSchema.optional(),
   })
   .strict()
+  .superRefine((spec, ctx) => {
+    if (spec.stage === "motor" && !spec.motor)
+      ctx.addIssue({ code: "custom", path: ["motor"], message: "Select a motor session M0–M8" });
+    if (spec.motor && spec.stage !== "motor")
+      ctx.addIssue({ code: "custom", path: ["motor"], message: "Motor session requires the motor stage" });
+    if (spec.motorSource && spec.stage !== "motor")
+      ctx.addIssue({ code: "custom", path: ["motorSource"], message: "Motor source requires the motor stage" });
+  })
   .transform((spec) => ({
     ...spec,
     backend:
@@ -193,6 +206,21 @@ export function createApp(
     expectedGeneration?: string,
     expectedBackendRevision?: string,
   ) {
+    if (spec.stage === "motor") {
+      if (store.runs(1000).some((run) => run.spec.mode === "minecraft" && ["queued", "running", "paused", "pausing"].includes(run.status)))
+        throw new Error("Motor sessions run alone; finish or cancel other Minecraft runs first");
+      if (spec.motorSource) {
+        const source = store.getRun(spec.motorSource);
+        if (source?.status !== "completed" || source.spec.stage !== "motor")
+          throw new Error("Motor source must be a completed motor run");
+      }
+      const catalog = await worlds.catalog();
+      const profile = catalog.profiles.find((profile) => profile.id === catalog.active?.profileId);
+      if (spec.mode !== "minecraft" || spec.component !== "pipeline" || !spec.motor ||
+        profile?.name !== "MLCraft Motor Superflat" || (await worlds.context())?.settings.type !== "flat" ||
+        JSON.stringify(spec.arena) !== JSON.stringify(motorArena(spec.motor, spec.seed)))
+        throw new Error("Motor sessions require the dedicated superflat world and their isolated stage arena");
+    }
     const backend = (await backendRegistry).select(spec, config.MC_VERSION);
     if (backend.descriptor.id === "fabric") {
       if (config.MC_AUTH !== "offline")
@@ -446,6 +474,21 @@ export function createApp(
             "No fresh rendered frame is available for this agent. Use the Fabric client backend.",
         };
   });
+  app.get("/runs/:id/agents/:username/sound", async (req) => {
+    const { id, username } = z.object({
+      id: z.uuid(),
+      username: z.string().regex(/^rl_[a-f0-9]{6}_\d{1,3}$/),
+    }).parse(req.params);
+    return scheduler.soundAgent(id, username);
+  });
+  app.post("/runs/:id/agents/:username/sound", async (req) => {
+    const { id, username } = z.object({
+      id: z.uuid(),
+      username: z.string().regex(/^rl_[a-f0-9]{6}_\d{1,3}$/),
+    }).parse(req.params);
+    const { muted } = z.object({ muted: z.boolean() }).strict().parse(req.body);
+    return scheduler.soundAgent(id, username, muted);
+  });
   app.post(
     "/runs/:id/agents/:username/capture",
     { bodyLimit: 1100000 },
@@ -587,6 +630,111 @@ export function createApp(
   app.post("/runs", async (req, reply) =>
     reply.code(201).send(await enqueue(runSchema.parse(req.body))),
   );
+  app.post("/phase0/preview", async (req, reply) => {
+    const existing = store
+      .runs(1000)
+      .find(
+        (run) =>
+          run.spec.preview &&
+          ["queued", "running", "paused", "pausing"].includes(run.status),
+      );
+    if (existing) return existing;
+    const { backend } = z
+      .object({
+        backend: z.enum(["mineflayer", "fabric"]).default("mineflayer"),
+      })
+      .strict()
+      .parse(req.body ?? {});
+    const spec = runSchema.parse({
+      stage: "movement",
+      mode: "minecraft",
+      backend,
+      component: "environment",
+      agents: 1,
+      episodes: 1,
+      ticksPerEpisode: 1,
+      tickMs: 1000,
+      seed: 42,
+    });
+    return reply.code(201).send(await enqueue({ ...spec, preview: true }));
+  });
+  const motorWorldName = "MLCraft Motor Superflat";
+  async function motorWorldState() {
+    const catalog = await worlds.catalog();
+    const profile = catalog.profiles.find((profile) => profile.id === catalog.active?.profileId);
+    const generation = profile?.generations.find((generation) => generation.id === catalog.active?.generationId);
+    const ready = profile?.name === motorWorldName && generation?.settings.type === "flat" && server.state.status === "running" && !!server.state.arenaReady;
+    return { ready, profile: profile?.name, server: server.state.status,
+      reason: ready ? "" : profile?.name !== motorWorldName ? "Prepare the dedicated motor superflat world" : server.state.status !== "running" ? "Start the Minecraft server" : "Arena plugin is unavailable" };
+  }
+  app.get("/phase3a/world", motorWorldState);
+  let motorWorldPreparation: Promise<void> | undefined;
+  async function prepareMotorWorld() {
+    if ((await motorWorldState()).ready) return;
+    if (motorWorldPreparation) return motorWorldPreparation;
+    motorWorldPreparation = (async () => {
+    if (scheduler.hasMinecraftWorkers() || store.queued().some((run) => run.spec.mode === "minecraft"))
+      throw new Error("Finish or cancel active Minecraft runs before switching to the motor world");
+    if (server.state.status === "running") await server.stop();
+    const catalog = await worlds.catalog();
+    const existing = catalog.profiles.find((profile) => profile.name === motorWorldName);
+    if (existing) await worlds.activate(existing.id, existing.generations[0].id);
+    else await worlds.create({
+      name: motorWorldName,
+      settings: {
+        type: "flat", seed: "31415926", difficulty: "peaceful", gamemode: "survival", structures: false,
+        flat: { biome: "minecraft:plains", layers: [
+          { block: "minecraft:bedrock", height: 1 },
+          { block: "minecraft:dirt", height: 2 },
+          { block: "minecraft:grass_block", height: 1 },
+        ] },
+      },
+    });
+    await server.start();
+    const deadline = Date.now() + 90000;
+    while (Date.now() < deadline) {
+      const state = await motorWorldState();
+      if (state.ready) return;
+      if (server.state.status === "failed") throw new Error("Motor world server failed to start");
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+    throw new Error("Motor world server did not become ready");
+    })().finally(() => { motorWorldPreparation = undefined; });
+    return motorWorldPreparation;
+  }
+  app.post("/phase3a/world", async () => { await prepareMotorWorld(); return motorWorldState(); });
+  app.post("/phase3a/sessions", async (req, reply) => {
+    const { session, agents, episodes, ticksPerEpisode, tickMs, seed, backend } = z.object({
+      session: z.enum(["M0", "M1", "M2", "M3", "M4", "M5", "M6", "M7", "M8"]),
+      agents: z.number().int().min(1).max(config.MAX_AGENTS).default(4),
+      episodes: z.number().int().min(1).max(100000).default(24),
+      ticksPerEpisode: z.number().int().min(1).max(100000).default(80),
+      tickMs: z.number().int().min(20).max(5000).default(100),
+      seed: z.number().int().min(0).max(2147483647).default(42),
+      backend: z.enum(["mineflayer", "fabric"]).default("mineflayer"),
+    }).strict().parse(req.body ?? {});
+    await prepareMotorWorld();
+    if (!motorSessions.some((entry) => entry.id === session)) throw new Error("Unknown motor session");
+    const previous = Number(session.slice(1)) - 1;
+    const source = previous >= 0 ? store.runs(1000).find((run) => run.status === "completed" && run.spec.stage === "motor" && run.spec.motor === `M${previous}`) : undefined;
+    if (session === "M8" && !source)
+      throw new Error("Complete an M7 run before testing generalisation on M8");
+    if (session === "M8" && source) {
+      if (seed === source.spec.seed) throw new Error("Choose a terrain seed different from the completed M7 run");
+      const checkpoint = JSON.parse(await readFile(resolve(config.artifactDir, source.id, "checkpoint.json"), "utf8"));
+      if (checkpoint.kind !== "neat-rl" || checkpoint.generation < 1)
+        throw new Error("M8 requires an M7 run that evolved at least one NEAT generation");
+    }
+    const spec = runSchema.parse({
+      stage: "motor", motor: session, mode: "minecraft", component: "pipeline",
+      ...(source ? { motorSource: source.id } : {}),
+      agents, episodes, ticksPerEpisode, tickMs, seed, backend,
+      arena: motorArena(session, seed),
+      rules: { ...DEFAULT_TRAINING_RULES, noHungerLoss: true, pvp: false, fallDamage: false, drowningDamage: false,
+        difficulty: "peaceful", world: { doMobSpawning: false, doDaylightCycle: false, doWeatherCycle: false } },
+    });
+    return reply.code(201).send(await enqueue(spec));
+  });
   app.post("/runs/:id/playback", async (req) => {
     const { id } = z.object({ id: z.uuid() }).parse(req.params);
     return scheduler.playback(id, playbackSchema.parse(req.body));

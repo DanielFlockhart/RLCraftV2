@@ -1,5 +1,5 @@
-import type { Run } from "@rlcraft/core";
-import { effectiveStepMs } from "@rlcraft/core";
+import type { Run } from "@mlcraft/core";
+import { effectiveStepMs } from "@mlcraft/core";
 
 /** Viewer-only projection: no Minecraft commands or agent state changes. */
 export function viewerHudRuns(runs: Run[], now = Date.now()) {

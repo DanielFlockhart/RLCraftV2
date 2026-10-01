@@ -8,7 +8,7 @@ import {
   type InspectableModule,
   PlaceholderPolicy,
   PlaceholderTrainer,
-} from "@rlcraft/agents";
+} from "@mlcraft/agents";
 import { modelCodeVersion } from "../apps/control/src/models.js";
 import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { join } from "node:path";

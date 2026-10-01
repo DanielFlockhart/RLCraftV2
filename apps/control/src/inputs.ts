@@ -3,7 +3,7 @@ import {
   inputCatalog,
   defaultInputs,
   type AgentInputConfig,
-} from "@rlcraft/core";
+} from "@mlcraft/core";
 const ids = new Set(inputCatalog.channels.map((c) => c.id));
 export const inputConfigSchema = z
   .object({

@@ -5,7 +5,7 @@ import {
   DEFAULT_AGENT_SETUP,
   type AgentSetup,
   type AgentPreset,
-} from "@rlcraft/core";
+} from "@mlcraft/core";
 
 const slots = Array.from({ length: 41 }, (_, slot) => ({
   slot,

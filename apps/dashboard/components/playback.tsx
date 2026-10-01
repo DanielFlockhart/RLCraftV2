@@ -5,7 +5,7 @@ import {
   type Run,
   type RunSpec,
   type PlaybackCommand,
-} from "@rlcraft/core";
+} from "@mlcraft/core";
 
 const speeds = [0.25, 0.5, 1, 2, 4, 8];
 function Pace({ spec, speed }: { spec: RunSpec; speed: number }) {

@@ -4,7 +4,7 @@ import { existsSync } from "node:fs";
 import { resolve, join, sep } from "node:path";
 import { createServer } from "node:net";
 import mineflayer, { type Bot } from "mineflayer";
-import type { Run } from "@rlcraft/core";
+import type { Run } from "@mlcraft/core";
 import { Store } from "../apps/control/src/store.js";
 import { MinecraftServer } from "../apps/control/src/server.js";
 import { config, root } from "../apps/control/src/config.js";

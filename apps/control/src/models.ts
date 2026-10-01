@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import { resolve, relative } from "node:path";
-import type { ModelSnapshot, StageId } from "@rlcraft/core";
+import type { ModelSnapshot, StageId } from "@mlcraft/core";
 import { root } from "./config.js";
 
 // Hash code, not mtimes, so replacing a file always invalidates the preview.

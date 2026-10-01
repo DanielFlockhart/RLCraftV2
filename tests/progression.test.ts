@@ -8,7 +8,7 @@ import { join } from "node:path";
 import minecraftData from "minecraft-data";
 import { Vec3 } from "vec3";
 import type { Bot } from "mineflayer";
-import type { ProgressEvidence, ProgressRecord, Run } from "@rlcraft/core";
+import type { ProgressEvidence, ProgressRecord, Run } from "@mlcraft/core";
 import { MinecraftProgress } from "../packages/agents/src/progression.js";
 import { Store } from "../apps/control/src/store.js";
 import {

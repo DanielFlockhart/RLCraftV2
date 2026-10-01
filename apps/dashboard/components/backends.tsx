@@ -5,7 +5,7 @@ import {
   type AgentInputConfig,
   type BackendSnapshot,
   type Mode,
-} from "@rlcraft/core";
+} from "@mlcraft/core";
 
 export function BackendSelector({
   mode,

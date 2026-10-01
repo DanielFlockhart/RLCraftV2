@@ -11,7 +11,7 @@ import {
   defaultInputs,
   type CaptureFrame,
   type AgentInputConfig,
-} from "@rlcraft/core";
+} from "@mlcraft/core";
 import { config, root, token } from "../apps/control/src/config.js";
 import { createApp } from "../apps/control/src/app.js";
 import { Store } from "../apps/control/src/store.js";

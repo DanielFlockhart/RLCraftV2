@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Bot } from "mineflayer";
-import { isViewerUsername } from "@rlcraft/core";
-import { trainingEntities } from "@rlcraft/agents";
+import { isViewerUsername } from "@mlcraft/core";
+import { trainingEntities } from "@mlcraft/agents";
 test("viewer names are case-insensitive and viewers are excluded from training targets", () => {
   assert.equal(isViewerUsername("ChilledVibe"), true);
   assert.equal(isViewerUsername("chilledvibe"), true);

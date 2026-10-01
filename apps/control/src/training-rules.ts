@@ -4,7 +4,7 @@ import {
   type Run,
   type RunSpec,
   type TrainingRules,
-} from "@rlcraft/core";
+} from "@mlcraft/core";
 export const trainingRulesSchema = z
   .object({
     keepInventory: z.boolean(),

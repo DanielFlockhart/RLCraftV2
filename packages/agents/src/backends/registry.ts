@@ -9,8 +9,8 @@ import type {
   BackendSnapshot,
   Environment,
   RunSpec,
-} from "@rlcraft/core";
-import { inputCatalog } from "@rlcraft/core";
+} from "@mlcraft/core";
+import { inputCatalog } from "@mlcraft/core";
 import type { BackendContext, BackendAdapter } from "./contract.js";
 import { selectedEnvironment } from "./selected.js";
 

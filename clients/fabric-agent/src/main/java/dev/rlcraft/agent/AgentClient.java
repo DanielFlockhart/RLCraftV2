@@ -9,6 +9,8 @@ import java.util.*;
 import java.util.concurrent.*;
 import net.fabricmc.api.ClientModInitializer;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.option.ChatVisibility;
+import net.minecraft.client.tutorial.TutorialStep;
 import net.minecraft.client.gui.screen.TitleScreen;
 import net.minecraft.client.gui.screen.ConnectScreen;
 import net.minecraft.client.network.ServerAddress;
@@ -16,6 +18,7 @@ import net.minecraft.client.network.ServerInfo;
 import net.minecraft.client.texture.NativeImage;
 import net.minecraft.client.util.ScreenshotRecorder;
 import net.minecraft.item.ItemStack;
+import net.minecraft.sound.SoundCategory;
 import net.minecraft.util.Hand;
 import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.util.hit.HitResult;
@@ -31,7 +34,8 @@ public final class AgentClient implements ClientModInitializer {
     private final String token = System.getenv("RLCRAFT_RPC_TOKEN");
     private JsonObject controls = new JsonObject();
     private JsonObject settings = new JsonObject();
-    private boolean configured, digging;
+    private boolean configured, digging, respawnRequested, soundMuted;
+    private float unmutedMasterVolume;
     private long lastAction, lastCapture, frameSequence, inputSequence;
     private JsonObject latestFrame;
     private final ProgressTracker progress = new ProgressTracker();
@@ -100,7 +104,7 @@ public final class AgentClient implements ClientModInitializer {
                 settings = params.getAsJsonObject("render"); profile = params.getAsJsonObject("inputs");
                 configured = true; configure(c);
                 String address = params.get("host").getAsString() + ":" + params.get("port").getAsInt();
-                ConnectScreen.connect(new TitleScreen(), c, ServerAddress.parse(address), new ServerInfo("RLCraft training", address, false));
+                ConnectScreen.connect(new TitleScreen(), c, ServerAddress.parse(address), new ServerInfo("MLCraft training", address, false));
                 return JsonNull.INSTANCE;
             case "status": {
                 JsonObject status = new JsonObject(); status.addProperty("connected", c.player != null && c.world != null && c.world.isChunkLoaded(c.player.getBlockPos()));
@@ -114,6 +118,17 @@ public final class AgentClient implements ClientModInitializer {
                 state.add("slots",slots);state.addProperty("health",c.player.getHealth());state.addProperty("food",c.player.getHungerManager().getFoodLevel());state.addProperty("experienceLevel",c.player.experienceLevel);state.addProperty("heldSlot",c.player.getInventory().selectedSlot);state.addProperty("gamemode",c.interactionManager.getCurrentGameMode().getName());state.add("position",vector(c.player.getX(),c.player.getY(),c.player.getZ()));return state;
             }
             case "feed": return latestFrame == null ? JsonNull.INSTANCE : latestFrame.deepCopy();
+            case "sound": {
+                if (params.has("muted")) {
+                    boolean muted = params.get("muted").getAsBoolean();
+                    if (muted != soundMuted) {
+                        if (muted) unmutedMasterVolume = c.options.getSoundVolume(SoundCategory.MASTER);
+                        c.options.setSoundVolume(SoundCategory.MASTER, muted ? 0 : unmutedMasterVolume);
+                        soundMuted = muted;
+                    }
+                }
+                JsonObject sound = new JsonObject(); sound.addProperty("muted", soundMuted); return sound;
+            }
             case "apply":
                 requirePlayer(c);
                 controls = params.has("controls") ? params.getAsJsonObject("controls").deepCopy() : new JsonObject();
@@ -127,8 +142,8 @@ public final class AgentClient implements ClientModInitializer {
                 }
                 return JsonNull.INSTANCE;
             case "clear": controls = new JsonObject(); digging = false; progress.origin = params.has("origin") ? params.get("origin").getAsString() : "live"; return JsonNull.INSTANCE;
-            case "respawn": requirePlayer(c); if (c.player.isDead()) { c.player.requestRespawn(); c.setScreen(null); } return JsonNull.INSTANCE;
-            case "close": controls = new JsonObject(); digging = false; c.scheduleStop(); return JsonNull.INSTANCE;
+            case "respawn": requirePlayer(c); if (c.player.isDead()) { requestRespawn(c); c.setScreen(null); } return JsonNull.INSTANCE;
+            case "close": controls = new JsonObject(); digging = false; if (soundMuted) c.options.setSoundVolume(SoundCategory.MASTER, unmutedMasterVolume); c.scheduleStop(); return JsonNull.INSTANCE;
             default: throw new IllegalArgumentException("Unknown client RPC method");
         }
     }
@@ -136,6 +151,9 @@ public final class AgentClient implements ClientModInitializer {
         c.options.pauseOnLostFocus = false; c.options.enableVsync = false;
         c.options.maxFps = Math.max(20, integer("fps", 10)); c.options.viewDistance = integer("viewDistance", 4);
         c.options.hudHidden = !bool("showHud", true); c.options.fov = 90;
+        c.options.chatVisibility = ChatVisibility.HIDDEN;
+        c.getTutorialManager().setStep(TutorialStep.NONE);
+        unmutedMasterVolume = c.options.getSoundVolume(SoundCategory.MASTER);
         c.options.setPerspective(net.minecraft.client.option.Perspective.FIRST_PERSON);
         c.getWindow().setFramerateLimit(c.options.maxFps);
         if (!bool("visibleWindow", false)) GLFW.glfwHideWindow(c.getWindow().getHandle());
@@ -144,6 +162,17 @@ public final class AgentClient implements ClientModInitializer {
     private boolean bool(String key, boolean fallback) { return settings.has(key) ? settings.get(key).getAsBoolean() : fallback; }
     private static void requirePlayer(MinecraftClient c) { if (c.player == null || c.world == null) throw new IllegalStateException("Client player is not connected"); }
     private boolean pressed(String key) { return controls.has(key) && controls.get(key).getAsBoolean(); }
+    public boolean suppressDeathScreen() {
+        if (!configured) return false;
+        requestRespawn(MinecraftClient.getInstance());
+        return true;
+    }
+    private void requestRespawn(MinecraftClient c) {
+        if (c.player != null && c.player.isDead() && !respawnRequested) {
+            respawnRequested = true;
+            c.player.requestRespawn();
+        }
+    }
     public void tick() {
         if (!configured) return;
         MinecraftClient c = MinecraftClient.getInstance();
@@ -152,6 +181,8 @@ public final class AgentClient implements ClientModInitializer {
         c.options.keyLeft.setPressed(pressed("left")); c.options.keyRight.setPressed(pressed("right"));
         c.options.keyJump.setPressed(pressed("jump")); c.options.keySprint.setPressed(pressed("sprint")); c.options.keySneak.setPressed(pressed("sneak"));
         if (c.player == null || c.world == null) { latestFrame = null; return; }
+        if (c.player.isDead()) requestRespawn(c);
+        else respawnRequested = false;
         if (digging && c.crosshairTarget instanceof BlockHitResult && c.crosshairTarget.getType() == HitResult.Type.BLOCK && c.interactionManager != null) {
             BlockHitResult target = (BlockHitResult)c.crosshairTarget;
             if (c.interactionManager.updateBlockBreakingProgress(target.getBlockPos(), target.getSide())) c.player.swingHand(Hand.MAIN_HAND);

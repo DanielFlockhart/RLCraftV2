@@ -1,4 +1,4 @@
-import type { InputValue } from "@rlcraft/core";
+import type { InputValue } from "@mlcraft/core";
 export interface InputEvent {
   sequence: number;
   at: number;

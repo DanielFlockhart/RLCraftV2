@@ -6,7 +6,7 @@ import type {
   CaptureFrame,
   Environment,
   Observation,
-} from "@rlcraft/core";
+} from "@mlcraft/core";
 import type { BackendContext, StdioBackendConfig } from "./contract.js";
 import { parseBackendObservation } from "./observation.js";
 

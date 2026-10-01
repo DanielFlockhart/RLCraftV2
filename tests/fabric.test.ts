@@ -8,7 +8,7 @@ import {
   type RunSpec,
   type Environment,
   type CaptureFrame,
-} from "@rlcraft/core";
+} from "@mlcraft/core";
 import {
   parseRgbFrame,
   offlineUuid,

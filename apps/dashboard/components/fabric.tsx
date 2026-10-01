@@ -5,7 +5,7 @@ import {
   type AgentState,
   type CaptureFrame,
   type RenderSettings,
-} from "@rlcraft/core";
+} from "@mlcraft/core";
 import { MinecraftIcon } from "./minecraft-icon";
 
 export function FabricSettings({
@@ -155,6 +155,26 @@ export function AgentFeed({
   const [enabled, setEnabled] = useState(true),
     [rate, setRate] = useState(5),
     [now, setNow] = useState(Date.now());
+  const [soundMuted, setSoundMuted] = useState<boolean>();
+  const [soundBusy, setSoundBusy] = useState(false);
+  const [soundError, setSoundError] = useState("");
+  const soundPath = `/api/control/runs/${agent.runId}/agents/${agent.username}/sound`;
+  useEffect(() => {
+    setSoundMuted(undefined);
+    setSoundError("");
+    if (!online) return;
+    const controller = new AbortController();
+    void fetch(soundPath, { signal: controller.signal, cache: "no-store" })
+      .then(async (response) => {
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error ?? "Sound state unavailable");
+        setSoundMuted(result.muted);
+      })
+      .catch((error) => {
+        if (!controller.signal.aborted) setSoundError((error as Error).message);
+      });
+    return () => controller.abort();
+  }, [soundPath, online]);
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 200);
     return () => clearInterval(timer);
@@ -278,6 +298,31 @@ export function AgentFeed({
         <button type="button" onClick={() => setEnabled(!enabled)}>
           {enabled ? "Pause feed viewing" : "Resume feed viewing"}
         </button>
+        <button
+          type="button"
+          disabled={soundMuted === undefined || soundBusy || !online}
+          aria-pressed={soundMuted ?? false}
+          onClick={async () => {
+            setSoundBusy(true);
+            setSoundError("");
+            try {
+              const response = await fetch(soundPath, {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ muted: !soundMuted }),
+              });
+              const result = await response.json();
+              if (!response.ok) throw new Error(result.error ?? "Sound control failed");
+              setSoundMuted(result.muted);
+            } catch (error) {
+              setSoundError((error as Error).message);
+            } finally {
+              setSoundBusy(false);
+            }
+          }}
+        >
+          {soundMuted === undefined ? "Loading sound…" : soundMuted ? "Unmute agent" : "Mute agent"}
+        </button>
         <label>
           Viewer refresh
           <select
@@ -295,6 +340,7 @@ export function AgentFeed({
             : "Training controls are independent of feed viewing."}
         </span>
       </footer>
+      {soundError && <p role="alert">{soundError}</p>}
     </section>
   );
 }

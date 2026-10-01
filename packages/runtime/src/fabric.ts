@@ -3,7 +3,7 @@ import { readFile, readdir } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
-import { DEFAULT_RENDER_SETTINGS } from "@rlcraft/core";
+import { DEFAULT_RENDER_SETTINGS } from "@mlcraft/core";
 
 export const fabricVersion = "1.18.1";
 export const fabricLoader = "0.16.14";

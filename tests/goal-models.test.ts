@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DatasetManager } from "../apps/control/src/datasets.js";
 import { GoalModelManager } from "../apps/control/src/goal-models.js";
-import type { DatasetJob, GoalModelJob } from "@rlcraft/core";
+import type { DatasetJob, GoalModelJob } from "@mlcraft/core";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const python =

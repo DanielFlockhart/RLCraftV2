@@ -4,7 +4,7 @@ import {
   arenaBounds,
   arenasOverlap,
 } from "../../../packages/core/src/arenas.js";
-import type { RunSpec, Run } from "@rlcraft/core";
+import type { RunSpec, Run } from "@mlcraft/core";
 const data = minecraftData("1.18.1");
 export const arenaBlockCatalog = Object.values(data.blocksByName).map(
   (block) => ({ id: `minecraft:${block.name}`, name: block.displayName }),

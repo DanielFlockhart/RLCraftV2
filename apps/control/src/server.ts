@@ -10,7 +10,7 @@ import type {
   AgentSetup,
   ArenaSpec,
   TrainingRules,
-} from "@rlcraft/core";
+} from "@mlcraft/core";
 import { config } from "./config.js";
 import { Store } from "./store.js";
 import { receiveServerProgress } from "./progress.js";

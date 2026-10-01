@@ -1,5 +1,5 @@
 import type { Bot } from "mineflayer";
-import { DEFAULT_VIEWERS, isViewerUsername } from "@rlcraft/core";
+import { DEFAULT_VIEWERS, isViewerUsername } from "@mlcraft/core";
 /** Use this when extending observations or combat targeting with nearby entities.
  * The server also hides viewers from agents, so they are excluded at both layers.
  */

@@ -4,7 +4,7 @@ import type {
   ProgressEvidence,
   ProgressRule,
   ProgressSnapshot,
-} from "@rlcraft/core";
+} from "@mlcraft/core";
 import catalogJson from "../../core/src/progression-catalog.json" with { type: "json" };
 
 const catalog = catalogJson as ProgressSnapshot["catalog"];

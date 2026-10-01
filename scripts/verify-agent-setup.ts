@@ -19,9 +19,9 @@ import {
   DEFAULT_ARENA_SPEC,
   type AgentSetup,
   type ArenaSpec,
-} from "@rlcraft/core";
+} from "@mlcraft/core";
 import { arenaSpawn } from "../packages/core/src/arenas.js";
-import { MinecraftEnvironment } from "@rlcraft/agents";
+import { MinecraftEnvironment } from "@mlcraft/agents";
 import { Store } from "../apps/control/src/store.js";
 import { createApp } from "../apps/control/src/app.js";
 import { config, root, token } from "../apps/control/src/config.js";

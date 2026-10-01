@@ -54,14 +54,19 @@ export function isViewerUsername(
   );
 }
 export type StageId =
-  "movement" | "wood_collection" | "block_collection" | "survival" | "pvp";
+  "movement" | "motor" | "wood_collection" | "block_collection" | "survival" | "pvp";
+export type MotorSession = "M0" | "M1" | "M2" | "M3" | "M4" | "M5" | "M6" | "M7" | "M8";
 export type Component = "pipeline" | "environment" | "evaluation";
 export interface RunSpec {
+  /** Keep one connected agent idle for Phase 0 inspection. */
+  preview?: boolean;
   render?: RenderSettings;
   /** Registered backend ID. Omitted legacy runs retain their original default. */
   backend?: string;
   inputs?: import("./inputs.js").AgentInputConfig;
   stage: StageId;
+  motor?: MotorSession;
+  motorSource?: string;
   mode: Mode;
   component: Component;
   agents: number;
@@ -378,7 +383,7 @@ export interface StageDefinition {
   id: StageId;
   name: string;
   description: string;
-  policy: "placeholder";
+  policy: "placeholder" | "neat-rl";
   readiness: string;
 }
 export const stages: StageDefinition[] = [
@@ -388,6 +393,13 @@ export const stages: StageDefinition[] = [
     description: "Position observations and displacement rewards.",
     policy: "placeholder",
     readiness: "Observation + reward adapter",
+  },
+  {
+    id: "motor",
+    name: "Primitive motor skills",
+    description: "Target reaching across M0–M8 arena curricula using evolved control graphs.",
+    policy: "neat-rl",
+    readiness: "NEAT evolutionary reinforcement learning in isolated Minecraft arenas",
   },
   {
     id: "wood_collection",
@@ -459,6 +471,8 @@ export interface Trainer {
 export interface Environment {
   /** Administrative live camera, independent of policy channel selection. */
   feed?(): Promise<import("./inputs.js").CaptureFrame | undefined>;
+  /** Local client audio output control, independent of policy inputs. */
+  sound?(muted?: boolean): Promise<{ muted: boolean }>;
   /** Administrative milestone evidence; never an additional policy observation. */
   watchProgress?(
     listener: (evidence: import("./progression.js").ProgressEvidence) => void,
@@ -479,6 +493,7 @@ export type WorkerMessage =
       frame?: import("./inputs.js").CaptureFrame;
       error?: string;
     }
+  | { type: "sound"; requestId: string; muted?: boolean; error?: string }
   | { type: "game-progress"; record: import("./progression.js").ProgressRecord }
   | {
       type: "progress-tracker";

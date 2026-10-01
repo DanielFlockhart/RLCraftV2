@@ -64,11 +64,11 @@ at worker startup fails the run instead of changing its backend silently.
 
 ## Stable extension boundary
 
-The SDK entry point is `@rlcraft/agents/backends`. A TypeScript module exports:
+The SDK entry point is `@mlcraft/agents/backends`. A TypeScript module exports:
 
 ```ts
-import type { BackendContext } from "@rlcraft/agents/backends";
-import type { Environment } from "@rlcraft/core";
+import type { BackendContext } from "@mlcraft/agents/backends";
+import type { Environment } from "@mlcraft/core";
 
 export function createEnvironment(context: BackendContext): Environment {
   // Return your adapter around a game client, local process or remote service.

@@ -1,6 +1,6 @@
 # Training world profiles
 
-Open **Minecraft server → Training worlds** in the dashboard. Changes manage only V2's configured `SERVER_DIR`; the original RLCraft server remains separate. On an existing installation, stop Minecraft normally, stop/restart `npm run dev` to load the updated control service, then open the world controls.
+Open **Minecraft server → Training worlds** in the dashboard. Changes manage only MLCraft's configured `SERVER_DIR`; the original RLCraft server remains separate. On an existing installation, stop Minecraft normally, stop/restart `npm run dev` to load the updated control service, then open the world controls.
 
 1. Finish or cancel queued/active Minecraft runs, including paused ones.
 2. Click **Stop server** and wait for `stopped`, allowing the world to save.

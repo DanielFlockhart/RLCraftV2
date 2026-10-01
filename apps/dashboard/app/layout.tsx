@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 export const metadata: Metadata = {
-  title: "RLCraft V2 · Control Room",
+  title: "MLCraft · Control Room",
   description:
     "Minecraft agent orchestration, training stages and performance monitoring.",
 };

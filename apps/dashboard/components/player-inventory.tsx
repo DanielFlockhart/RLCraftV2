@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import type { GoalSelectionExample } from "@rlcraft/core";
+import type { GoalSelectionExample } from "@mlcraft/core";
 import fontData from "../public/minecraft/inventory/font.json";
 import itemData from "../public/minecraft/inventory/items.json";
 

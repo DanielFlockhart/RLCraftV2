@@ -17,7 +17,7 @@ import { Store } from "../apps/control/src/store.js";
 import { MinecraftServer } from "../apps/control/src/server.js";
 import { WorldManager } from "../apps/control/src/worlds.js";
 import { config, root } from "../apps/control/src/config.js";
-import type { WorldSettings, WorldGeneration } from "@rlcraft/core";
+import type { WorldSettings, WorldGeneration } from "@mlcraft/core";
 
 const listener = createServer();
 await new Promise<void>((ok, fail) => {

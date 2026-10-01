@@ -19,6 +19,7 @@ import {
   Terminal,
   Users,
   X,
+  Map,
 } from "lucide-react";
 import { Badge, Chart, format } from "../components/telemetry";
 import { TrainingWorlds } from "../components/worlds";
@@ -31,12 +32,21 @@ import { Architecture } from "../components/architecture";
 import { Progress } from "../components/progress";
 import { Datasets } from "../components/datasets";
 import { GoalModels } from "../components/goal-models";
+import {
+  TrainingStages,
+  PlannedTrainingStage,
+} from "../components/training-stages";
+import { trainingStages, type TrainingStageId } from "../lib/training-stages";
 import { InputEditor, LiveInputs } from "../components/inputs";
 import { BackendSelector } from "../components/backends";
 import { FabricSettings } from "../components/fabric";
-import { defaultInputs } from "@rlcraft/core";
+import { defaultInputs } from "@mlcraft/core";
 import { MinecraftIcon } from "../components/minecraft-icon";
-import type { Snapshot, RunSpec, Run, StageId, LogEntry } from "@rlcraft/core";
+import { AgentDetails } from "../components/agent-details";
+import { AgentMinimap } from "../components/agent-minimap";
+import { MotorTraining } from "../components/motor-training";
+import { trainingPhases } from "../lib/training-stages";
+import type { Snapshot, RunSpec, Run, StageId, LogEntry } from "@mlcraft/core";
 type View =
   | "overview"
   | "training"
@@ -57,7 +67,66 @@ export default function Dashboard() {
   const [busy, setBusy] = useState(false);
   const [modal, setModal] = useState(false);
   const [selected, setSelected] = useState<string>("");
-  const [trainingStage, setTrainingStage] = useState<"phase1a">();
+  const [trainingStage, setTrainingStage] = useState<TrainingStageId>();
+  const [completedPhases, setCompletedPhases] = useState<number[]>([]);
+  const [minimapOpen, setMinimapOpen] = useState(false);
+  const [previewBackend, setPreviewBackend] = useState<"fabric" | "mineflayer">(
+    "fabric",
+  );
+  const [clientStatus, setClientStatus] = useState<{
+    ready: boolean;
+    reason: string;
+    preparation: { status: string; error?: string };
+  }>();
+  useEffect(() => {
+    if (view !== "training" || trainingStage !== "phase0") return;
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout>;
+    async function poll() {
+      try {
+        const response = await fetch("/api/control/clients", {
+          signal: controller.signal,
+        });
+        if (response.ok) setClientStatus(await response.json());
+      } catch {}
+      if (!controller.signal.aborted) timer = setTimeout(poll, 3000);
+    }
+    void poll();
+    return () => {
+      controller.abort();
+      clearTimeout(timer);
+    };
+  }, [view, trainingStage]);
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(
+        localStorage.getItem("mlcraft-training-phases") ??
+          localStorage.getItem("rlcraft-training-phases") ??
+          "[]",
+      );
+      if (Array.isArray(saved))
+        setCompletedPhases(
+          saved.filter(
+            (phase) =>
+              Number.isInteger(phase) &&
+              phase >= 0 &&
+              phase < trainingPhases.length,
+          ),
+        );
+    } catch {}
+  }, []);
+  function togglePhase(phase: number) {
+    setCompletedPhases((current) => {
+      const next = current.includes(phase)
+        ? current.filter((value) => value !== phase)
+        : [...current, phase];
+      localStorage.setItem("mlcraft-training-phases", JSON.stringify(next));
+      return next;
+    });
+  }
+  const selectedTrainingStage = trainingStages.find(
+    (stage) => stage.id === trainingStage,
+  );
   const phaseGoalStage = view === "training" && trainingStage === "phase1a";
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -70,7 +139,10 @@ export default function Dashboard() {
     if (params.get("view") === "training") {
       setView(params.get("run") ? "overview" : "training");
       setSelected(params.get("run") ?? "");
-      if (params.get("stage") === "phase1a") setTrainingStage("phase1a");
+      const stage = trainingStages.find(
+        (entry) => entry.id === params.get("stage"),
+      );
+      if (stage) setTrainingStage(stage.id);
     }
   }, []);
   const [detail, setDetail] = useState<{
@@ -164,10 +236,36 @@ export default function Dashboard() {
     }
   }
   const runs = data?.runs ?? [];
+  const previewRun = runs.find(
+    (run) => run.spec.preview && active.includes(run.status),
+  );
+  const previewAgent = data?.agents.find(
+    (agent) => agent.runId === previewRun?.id,
+  );
+  const serverStatus = online ? data?.server.status : undefined;
+  const serverStatusLabel = !serverStatus
+    ? "Unknown"
+    : serverStatus === "running"
+      ? "Online"
+      : serverStatus === "starting"
+        ? "Starting…"
+        : serverStatus === "stopping"
+          ? "Stopping…"
+          : serverStatus === "failed"
+            ? "Offline · failed"
+            : "Offline";
+  const canStartServer =
+    !busy &&
+    online &&
+    data?.preparation?.status !== "running" &&
+    (serverStatus === "stopped" || serverStatus === "failed");
   const agents =
     data?.agents.filter((a) =>
       active.includes(runs.find((r) => r.id === a.runId)?.status ?? ""),
     ) ?? [];
+  const liveAgentCount = agents.filter((agent) =>
+    ["active", "paused", "resetting", "dead"].includes(agent.status),
+  ).length;
   const focus = selected
     ? (detail?.run ?? runs.find((r) => r.id === selected))
     : (runs.find((r) => r.status === "running") ?? runs[0]);
@@ -329,7 +427,7 @@ export default function Dashboard() {
             />
           </div>
           <div>
-            RLCraft <span>V2</span>
+            MLCraft
             <small>TRAINING INFRASTRUCTURE</small>
           </div>
         </a>
@@ -369,10 +467,54 @@ export default function Dashboard() {
             >
               <MinecraftIcon name={item.icon} size={24} />
               {item.label}
+              {item.id === "training" && (
+                <span className="nav-phase-count">
+                  {completedPhases.length}/{trainingPhases.length}
+                </span>
+              )}
+              {item.id === "agents" && (
+                <span
+                  className="nav-phase-count"
+                  aria-label={`${liveAgentCount} live agents`}
+                >
+                  {liveAgentCount}
+                </span>
+              )}
               {view === item.id && <ChevronRight size={14} />}
             </button>
           ))}
         </nav>
+        <section className="sidebar-server" aria-label="Minecraft server">
+          <div className="sidebar-server-heading">
+            <MinecraftIcon name="furnace" size={24} />
+            <strong>Minecraft server</strong>
+          </div>
+          <p className="sidebar-server-status" role="status">
+            <span
+              className={`dot ${serverStatus === "running" ? "live" : serverStatus === "starting" || serverStatus === "stopping" ? "pending" : serverStatus ? "offline" : ""}`}
+              aria-hidden="true"
+            />
+            {serverStatusLabel}
+          </p>
+          <button
+            className="primary"
+            disabled={!canStartServer}
+            onClick={() => act("server/start")}
+          >
+            <Play size={14} aria-hidden="true" />
+            {serverStatus === "running"
+              ? "Server online"
+              : serverStatus === "starting"
+                ? "Starting server…"
+                : serverStatus === "stopping"
+                  ? "Stopping server…"
+                  : "Start server"}
+          </button>
+          {!online && <p>Waiting for control service.</p>}
+          {online && data?.preparation?.status === "running" && (
+            <p>Server preparation in progress.</p>
+          )}
+        </section>
         <div className="sidebar-bottom">
           <div className="local-card">
             <span className={`dot ${online ? "live" : ""}`} />
@@ -411,6 +553,14 @@ export default function Dashboard() {
             </b>
           </div>
           <div className="top-status">
+            {serverStatus === "running" && (
+              <button
+                className="minimap-open"
+                onClick={() => setMinimapOpen(true)}
+              >
+                <Map size={15} /> Show minimap
+              </button>
+            )}
             <span className={`dot ${online ? "live" : ""}`} />
             {online ? "Live telemetry" : "Disconnected"}
             <span className="avatar">RL</span>
@@ -443,7 +593,7 @@ export default function Dashboard() {
                 {view === "overview"
                   ? "Orchestrate agents, run experiments, and see what happens."
                   : view === "training"
-                    ? "Independent stages with shared lifecycle, telemetry, and checkpoints."
+                    ? "The training roadmap, from state representations to full-game reinforcement learning."
                     : view === "agents"
                       ? "Agents belong to isolated run workers and share a bounded capacity."
                       : view === "server"
@@ -472,7 +622,7 @@ export default function Dashboard() {
           {!online && (
             <div className="notice warn">
               Control service unavailable. Run <code>npm run dev</code> from the
-              RLCraftV2 root. Controls become available when connected.
+              MLCraft root. Controls become available when connected.
             </div>
           )}
           {error && (
@@ -644,45 +794,150 @@ export default function Dashboard() {
                   >
                     Back to training stages
                   </button>
-                  <h2>Phase 1A · Goal prediction</h2>
+                  <h2>
+                    <label className="phase-check">
+                      <input
+                        type="checkbox"
+                        checked={completedPhases.includes(
+                          selectedTrainingStage?.phase ?? -1,
+                        )}
+                        onChange={() => {
+                          if (selectedTrainingStage)
+                            togglePhase(selectedTrainingStage.phase);
+                        }}
+                      />
+                      Phase {selectedTrainingStage?.code} ·{" "}
+                      {selectedTrainingStage?.name}
+                    </label>
+                  </h2>
                 </div>
               )}
               {!trainingStage && (
-                <div className="stage-grid">
-                  <section className="stage-card">
-                    <div className="stage-top">
-                      <span className="stage-number">1A</span>
-                      <Badge status="ready" />
-                    </div>
-                    <h3 className="minecraft-heading">
-                      <MinecraftIcon name="book" size={30} />
-                      Phase 1A · Goal prediction
-                    </h3>
-                    <p>
-                      Learn progression goals from inventory and player/world
-                      state.
-                    </p>
-                    <small>
-                      Supervised training · checkpoints · fine-tuning · loss
-                      graphs
-                    </small>
-                    <button
-                      onClick={() => {
-                        setTrainingStage("phase1a");
-                        setSelected("");
-                        window.history.replaceState(
-                          null,
-                          "",
-                          "/?view=training&stage=phase1a",
-                        );
-                      }}
-                    >
-                      Open stage <ArrowUpRight size={14} />
-                    </button>
-                  </section>
-                </div>
+                <TrainingStages
+                  completedPhases={completedPhases}
+                  onTogglePhase={togglePhase}
+                  onOpen={(id) => {
+                    setTrainingStage(id);
+                    setSelected("");
+                    window.history.replaceState(
+                      null,
+                      "",
+                      `/?view=training&stage=${id}`,
+                    );
+                  }}
+                />
               )}
               {phaseGoalStage && <GoalModels online={online} />}
+              {trainingStage === "phase3a" && (
+                <MotorTraining runs={runs} online={online} act={act} />
+              )}
+              {trainingStage === "phase0" && (
+                <section className="phase-zero-preview">
+                  <div className="panel phase-zero-actions">
+                    <div>
+                      <h3>Live agent preview</h3>
+                      <p>
+                        Spawn one idle agent to inspect its camera, available
+                        inputs, state, and feeds. No training steps are run.
+                      </p>
+                      <div className="phase-zero-options">
+                        <label>
+                          Agent type{" "}
+                          <select
+                            value={previewBackend}
+                            onChange={(event) =>
+                              setPreviewBackend(
+                                event.target.value as "fabric" | "mineflayer",
+                              )
+                            }
+                          >
+                            <option value="fabric">
+                              Real RGB client (Fabric)
+                            </option>
+                            <option value="mineflayer">
+                              Protocol client (no RGB)
+                            </option>
+                          </select>
+                        </label>
+                        {previewRun && (
+                          <span>
+                            Current preview:{" "}
+                            {previewRun.spec.backend === "fabric"
+                              ? "real RGB client"
+                              : "protocol client"}
+                          </span>
+                        )}
+                        {previewBackend === "fabric" &&
+                          !clientStatus?.ready && (
+                            <div className="phase-zero-prepare">
+                              <button
+                                className="secondary"
+                                disabled={
+                                  busy ||
+                                  !online ||
+                                  clientStatus?.preparation.status === "running"
+                                }
+                                onClick={() => act("clients/prepare")}
+                              >
+                                {clientStatus?.preparation.status === "running"
+                                  ? "Preparing RGB client…"
+                                  : "Prepare RGB client"}
+                              </button>
+                              <span role="status">
+                                {clientStatus?.preparation.error ??
+                                  clientStatus?.reason ??
+                                  "Checking RGB client…"}
+                              </span>
+                            </div>
+                          )}
+                      </div>
+                    </div>
+                    {previewRun ? (
+                      <button
+                        className="secondary"
+                        disabled={busy}
+                        onClick={() => act(`runs/${previewRun.id}/cancel`)}
+                      >
+                        <Square size={14} /> Stop preview
+                      </button>
+                    ) : (
+                      <button
+                        className="primary"
+                        disabled={
+                          busy ||
+                          !online ||
+                          serverStatus !== "running" ||
+                          (previewBackend === "fabric" && !clientStatus?.ready)
+                        }
+                        onClick={() =>
+                          act("phase0/preview", { backend: previewBackend })
+                        }
+                      >
+                        <Play size={14} /> {busy ? "Starting…" : "Run preview"}
+                      </button>
+                    )}
+                  </div>
+                  {previewRun && !previewAgent && (
+                    <p className="notice" role="status">
+                      Connecting the preview agent…
+                    </p>
+                  )}
+                  {previewRun && previewAgent && (
+                    <AgentDetails
+                      key={previewRun.id}
+                      runId={previewRun.id}
+                      username={previewAgent.username}
+                      embedded
+                    />
+                  )}
+                </section>
+              )}
+              {trainingStage &&
+                !phaseGoalStage &&
+                trainingStage !== "phase0" && (
+                trainingStage !== "phase3a" &&
+                  <PlannedTrainingStage id={trainingStage} />
+                )}
             </>
           )}
           {selected && view === "overview" && focus && (
@@ -993,14 +1248,7 @@ export default function Dashboard() {
                 <div className="server-actions">
                   <button
                     className="primary"
-                    disabled={
-                      busy ||
-                      !online ||
-                      data?.preparation?.status === "running" ||
-                      ["running", "starting", "stopping"].includes(
-                        data?.server.status ?? "",
-                      )
-                    }
+                    disabled={!canStartServer}
                     onClick={() => act("server/start")}
                   >
                     <Play size={14} /> Start server
@@ -1196,7 +1444,7 @@ export default function Dashboard() {
           )}
           <footer>
             <span>
-              <MinecraftIcon name="grass_block" size={18} /> RLCraft V2
+              <MinecraftIcon name="grass_block" size={18} /> MLCraft
             </span>
             <span>Local orchestration. Room to grow.</span>
             <span>Telemetry refreshes every 2 seconds</span>
@@ -1442,6 +1690,16 @@ export default function Dashboard() {
             </form>
           </section>
         </div>
+      )}
+      {minimapOpen && (
+        <AgentMinimap
+          agents={online && serverStatus === "running"
+            ? agents.filter((agent) =>
+                runs.find((run) => run.id === agent.runId)?.spec.mode === "minecraft",
+              )
+            : []}
+          onClose={() => setMinimapOpen(false)}
+        />
       )}
     </div>
   );

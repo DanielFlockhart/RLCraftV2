@@ -13,7 +13,7 @@ import type {
   AgentInputFrame,
   CaptureFrame,
   BackendSnapshot,
-} from "@rlcraft/core";
+} from "@mlcraft/core";
 import { Store } from "./store.js";
 import {
   ownsProgress,
@@ -23,9 +23,38 @@ import {
 import { config } from "./config.js";
 import { LocalProcessExecutor, type RunExecutor } from "./executor.js";
 import { initialPlayback, changePlayback } from "./playback.js";
-import { DEFAULT_AGENT_SETUP } from "@rlcraft/core";
+import { DEFAULT_AGENT_SETUP } from "@mlcraft/core";
 import { arenaSpawn } from "../../../packages/core/src/arenas.js";
 export class Scheduler {
+  private soundRequests = new Map<string, {
+    runId: string;
+    resolve: (value: { muted: boolean }) => void;
+    reject: (error: Error) => void;
+    timer: ReturnType<typeof setTimeout>;
+  }>();
+  soundAgent(id: string, username: string, muted?: boolean): Promise<{ muted: boolean }> {
+    if (this.soundRequests.size >= 64) throw new Error("Agent sound request capacity exceeded");
+    const child = this.workers.get(id);
+    const run = this.store.getRun(id);
+    if (!child?.connected || (run?.spec.backend ?? run?.backend?.descriptor.id) !== "fabric" ||
+      !this.store.agents(id).some((agent) => agent.username === username && ["active", "paused", "dead", "resetting"].includes(agent.status)))
+      throw new Error("No connected Fabric agent with that run and username");
+    const requestId = randomUUID();
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.soundRequests.delete(requestId);
+        reject(new Error("Agent sound request timed out"));
+      }, 5000);
+      this.soundRequests.set(requestId, { runId: id, resolve, reject, timer });
+      child.send({ type: "sound-request", requestId, username, muted }, (error) => {
+        if (error) {
+          clearTimeout(timer);
+          this.soundRequests.delete(requestId);
+          reject(error);
+        }
+      });
+    });
+  }
   private feedRequests = new Map<
     string,
     {
@@ -284,6 +313,17 @@ export class Scheduler {
         const current = this.store.getRun(run.id)!;
         if (current.status === "cancelled" && message.type !== "models") return;
         switch (message.type) {
+          case "sound": {
+            const pending = this.soundRequests.get(message.requestId);
+            if (pending?.runId === run.id) {
+              clearTimeout(pending.timer);
+              this.soundRequests.delete(message.requestId);
+              message.error || message.muted === undefined
+                ? pending.reject(new Error(message.error ?? "Agent sound state unavailable"))
+                : pending.resolve({ muted: message.muted });
+            }
+            break;
+          }
           case "feed": {
             const pending = this.feedRequests.get(message.requestId);
             if (pending?.runId === run.id) {

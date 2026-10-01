@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DatasetManager } from "../apps/control/src/datasets.js";
-import type { DatasetJob } from "@rlcraft/core";
+import type { DatasetJob } from "@mlcraft/core";
 const root = fileURLToPath(new URL("../", import.meta.url));
 const python =
   process.env.PYTHON_PATH ??
