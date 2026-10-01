@@ -60,6 +60,8 @@ export async function artifactFiles(root: string, runId: string) {
             "config.json",
             "metrics.jsonl",
             "episodes.jsonl",
+            "evolution.jsonl",
+            "motor-trials.jsonl",
             "controls.jsonl",
             "checkpoint.json",
             "models.json",

@@ -1,5 +1,5 @@
 name: RLCraftViewerGuard
-version: 0.6.0
+version: 0.8.0
 main: dev.rlcraft.viewer.ViewerGuard
 api-version: '1.18'
 description: Protected admin spectators for local Minecraft agent training.

@@ -229,6 +229,7 @@ export class GoalModelManager {
     const script = join(this.root, "scripts/learning/phase1a.py");
     const job: GoalModelJob = {
       id: randomUUID(),
+      stageId: dataset.generatorId,
       datasetId: dataset.id,
       modelVersion: "1.0.0",
       sourceHash: createHash("sha256")

@@ -54,8 +54,39 @@ export function isViewerUsername(
   );
 }
 export type StageId =
-  "movement" | "motor" | "wood_collection" | "block_collection" | "survival" | "pvp";
-export type MotorSession = "M0" | "M1" | "M2" | "M3" | "M4" | "M5" | "M6" | "M7" | "M8";
+  | "movement"
+  | "motor"
+  | "wood_collection"
+  | "block_collection"
+  | "survival"
+  | "pvp";
+export type MotorSession =
+  "M0" | "M1" | "M2" | "M3" | "M4" | "M5" | "M6" | "M7" | "M8";
+export interface MotorFullRunStage {
+  session: MotorSession;
+  agents: number;
+  episodes: number;
+  ticksPerEpisode: number;
+  tickMs: number;
+  seed: number;
+  backend: "mineflayer" | "fabric";
+  minSuccessRate: number;
+  minBestFitness?: number;
+  maxAttempts: number;
+  runIds: string[];
+  lastSuccessRate?: number;
+  lastBestFitness?: number;
+}
+export interface MotorFullRun {
+  id: string;
+  status: "running" | "paused" | "completed" | "failed" | "cancelled";
+  stageIndex: number;
+  stages: MotorFullRunStage[];
+  error?: string;
+  retryRequested?: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
 export type Component = "pipeline" | "environment" | "evaluation";
 export interface RunSpec {
   /** Keep one connected agent idle for Phase 0 inspection. */
@@ -67,6 +98,10 @@ export interface RunSpec {
   stage: StageId;
   motor?: MotorSession;
   motorSource?: string;
+  /** Continue the complete NEAT state from a terminal run checkpoint. */
+  motorResume?: string;
+  motorFullRunId?: string;
+  motorFullRunStage?: number;
   mode: Mode;
   component: Component;
   agents: number;
@@ -315,9 +350,12 @@ export interface AgentState {
   food?: number;
   inventory?: Record<string, number>;
   position?: ArenaPoint;
+  targetReached?: boolean;
+  targetSteps?: number;
   error?: string;
 }
 export interface Metric {
+  kind?: "evolution" | "motor-trial";
   at: number;
   runId: string;
   episode: number;
@@ -325,6 +363,26 @@ export interface Metric {
   stepsPerSecond: number;
   tickMs: number;
   workerMemoryMb: number;
+  neat?: {
+    generation: number;
+    species: number;
+    bestFitness: number;
+    generationBestFitness: number;
+    population: number;
+    speciesDetails?: {
+      id: number;
+      size: number;
+      bestFitness: number;
+      offspring: number;
+      stagnant: boolean;
+    }[];
+  };
+  motor?: {
+    trials: number;
+    successes: number;
+    successRate: number;
+    meanSuccessSteps: number | null;
+  };
 }
 export interface LogEntry {
   id?: number;
@@ -397,9 +455,11 @@ export const stages: StageDefinition[] = [
   {
     id: "motor",
     name: "Primitive motor skills",
-    description: "Target reaching across M0–M8 arena curricula using evolved control graphs.",
+    description:
+      "Target reaching across M0–M8 arena curricula using evolved control graphs.",
     policy: "neat-rl",
-    readiness: "NEAT evolutionary reinforcement learning in isolated Minecraft arenas",
+    readiness:
+      "NEAT evolutionary reinforcement learning in isolated Minecraft arenas",
   },
   {
     id: "wood_collection",

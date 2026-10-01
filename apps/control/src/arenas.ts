@@ -1,6 +1,8 @@
 import { z } from "zod";
 import minecraftData from "minecraft-data";
 import {
+  ARENA_BLOCK_BUDGET,
+  arenaBlockCount,
   arenaBounds,
   arenasOverlap,
 } from "../../../packages/core/src/arenas.js";
@@ -234,15 +236,9 @@ export function validateArenaRun(spec: RunSpec) {
     Math.abs(bounds.max.z) > 29999984
   )
     throw new Error("Arena layout exceeds Minecraft world bounds");
-  if (
-    (arena.blueprint.width + 2) *
-      (arena.blueprint.depth + 2) *
-      (arena.blueprint.height + 2) *
-      cells >
-    65536
-  )
+  if (arenaBlockCount(arena, spec.agents) > ARENA_BLOCK_BUDGET)
     throw new Error(
-      "Arena layout exceeds 65,536 blocks; reduce size or agent count",
+      `Arena layout exceeds ${ARENA_BLOCK_BUDGET.toLocaleString()} blocks; reduce size or agent count`,
     );
   if (
     arena.blueprint.entities.reduce((sum, entity) => sum + entity.count, 0) *

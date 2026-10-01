@@ -1,9 +1,11 @@
 # Model architecture and inspection
 
-The **Architecture** dashboard tab shows interactive graphs, module configuration,
-input/output shapes, parameter counts and component hyperparameters. Select nodes,
-pan, zoom, search modules and export the inspected JSON. Choose the current stage
-registry or a specific run. There are no separate diagram files to maintain.
+The **Architecture** dashboard tab maps the full training system and lets you
+select a roadmap component. It shows saved Phase 1A model configuration and
+evaluation, Phase 3A motor run inspections and telemetry, and the input, output
+and evaluation contracts for all roadmap components. A component without a saved
+model has no invented architecture or performance metrics. The runtime inspection
+API below remains available for detailed run snapshots and future components.
 
 ## Sources and accuracy
 
@@ -11,8 +13,8 @@ registry or a specific run. There are no separate diagram files to maintain.
   isolated process. It does not connect agents, reset policies or perform training.
   Preview caches are invalidated when package source/configuration contents change,
   and expire after thirty seconds to follow external configuration changes.
-  The dashboard checks every five seconds. **Refresh inspection** also reconstructs
-  the preview, for factories dependent on external files or services. Heavy or lazy
+  `GET /models/stage/:stage?fresh=1` reconstructs the preview for factories
+  dependent on external files or services. Heavy or lazy
   models should be inspected through an initialized run.
 - **Runtime:** reads the actual per-agent policy objects and the shared trainer.
   Samples are taken after generation reset, at step boundaries approximately every
@@ -21,23 +23,23 @@ registry or a specific run. There are no separate diagram files to maintain.
   that delay. Evaluation includes policies only; environment checks have no active
   model. Identical inspected metadata is grouped; identical architecture does not
   imply identical weights.
-- **Finished runs:** show the last saved runtime snapshot, labelled historical.
+- **Finished runs:** retain the last saved runtime snapshot.
   Restarting the service retrieves it from the run's `models.json` artifact. Existing
   runs retain their instantiated code; changing a source file affects previews and
-  newly started workers. The view does not claim that running objects were hot reloaded.
+  newly started workers. Running objects are not hot reloaded.
 
-The built-in policy and trainer are still no-op placeholders, shown with zero
+The built-in policy and trainer are still no-op placeholders with zero
 parameters and no learning hyperparameters. Missing, failing, oversized or timed-out
-inspectors explicitly show inspection unavailable. Unknown counts stay unknown.
+inspectors report inspection unavailable. Unknown counts stay unknown.
 
 ## Connecting your AI once
 
 `Policy` and `Trainer` expose an optional `inspectModel()` method returning
 `ModelInspection`, synchronously or asynchronously. Connect this method to the
-**actual model and optimizer objects** when implementing your AI. The dashboard
+**actual model and optimizer objects** when implementing your AI. The control service
 cannot safely infer arbitrary JavaScript/Python execution or an external service's
-network from source text. The adapter is the extension point, and subsequently
-reads architecture and hyperparameter changes automatically.
+network from source text. The adapter is the extension point for runtime
+architecture and hyperparameter snapshots.
 
 For models exposing `layers`, `getConfig()`, `getClassName()`, `countParams()`, shapes
 and `trainableWeights[].shape`, the supplied adapter walks native objects:

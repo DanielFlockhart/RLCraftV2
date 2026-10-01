@@ -105,7 +105,7 @@ test("arena validation rejects unknown blocks/items, unsafe spawns, invalid regi
           blueprint: { ...blueprint, width: 32, depth: 32, height: 16 },
         },
       }),
-    /65,536/,
+    /524,288/,
   );
   assert.throws(
     () =>

@@ -1,5 +1,7 @@
 import type { Run } from "@mlcraft/core";
 import { effectiveStepMs } from "@mlcraft/core";
+import { arenaSpawn } from "../../../packages/core/src/arenas.js";
+import { motorTarget } from "../../../packages/core/src/motor.js";
 
 /** Viewer-only projection: no Minecraft commands or agent state changes. */
 export function viewerHudRuns(runs: Run[], now = Date.now()) {
@@ -38,9 +40,30 @@ export function viewerHudRuns(runs: Run[], now = Date.now()) {
       const seconds = run.playback
         ? run.playback.generationSeconds
         : run.spec.generationSeconds;
+      const motorMarkers =
+        run.spec.stage === "motor" &&
+        run.spec.motor &&
+        run.spec.arena &&
+        run.episode > 0 &&
+        ["running", "paused", "pausing"].includes(run.status)
+          ? Array.from({ length: run.spec.agents }, (_, index) => ({
+              index,
+              spawn: arenaSpawn(run.spec.arena!, index),
+              target: motorTarget(
+                run.spec.arena!,
+                run.spec.motor!,
+                index,
+                run.episode,
+                run.spec.seed,
+                run.spec.agents,
+              ),
+            }))
+          : [];
       return {
         id: run.id,
         stage: run.spec.stage,
+        motor: run.spec.motor ?? "",
+        motorMarkers,
         component: run.spec.component,
         status: run.status,
         agents: run.spec.agents,

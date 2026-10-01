@@ -10,6 +10,8 @@ import {
   Download,
   FlaskConical,
   Pause,
+  PanelLeftClose,
+  PanelLeftOpen,
   Play,
   Plus,
   RefreshCw,
@@ -28,7 +30,7 @@ import { ArchiveStatus } from "../components/archive";
 import { ArenaEditor } from "../components/arenas";
 import { PlaybackSetup, PlaybackControls } from "../components/playback";
 import { TrainingRulesEditor } from "../components/training-rules";
-import { Architecture } from "../components/architecture";
+import { ArchitectureExplorer } from "../components/architecture-explorer";
 import { Progress } from "../components/progress";
 import { Datasets } from "../components/datasets";
 import { GoalModels } from "../components/goal-models";
@@ -70,6 +72,7 @@ export default function Dashboard() {
   const [trainingStage, setTrainingStage] = useState<TrainingStageId>();
   const [completedPhases, setCompletedPhases] = useState<number[]>([]);
   const [minimapOpen, setMinimapOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [previewBackend, setPreviewBackend] = useState<"fabric" | "mineflayer">(
     "fabric",
   );
@@ -78,6 +81,17 @@ export default function Dashboard() {
     reason: string;
     preparation: { status: string; error?: string };
   }>();
+  useEffect(() => {
+    setSidebarCollapsed(
+      localStorage.getItem("mlcraft-sidebar-collapsed") === "true",
+    );
+  }, []);
+  function toggleSidebar() {
+    setSidebarCollapsed((collapsed) => {
+      localStorage.setItem("mlcraft-sidebar-collapsed", String(!collapsed));
+      return !collapsed;
+    });
+  }
   useEffect(() => {
     if (view !== "training" || trainingStage !== "phase0") return;
     const controller = new AbortController();
@@ -417,24 +431,50 @@ export default function Dashboard() {
   }
   return (
     <div className="shell">
-      <aside className="sidebar">
-        <a className="brand" href="/">
-          <div className="brand-icon">
-            <MinecraftIcon
-              name="grass_block"
-              size={42}
-              label="Minecraft grass block"
-            />
-          </div>
-          <div>
-            MLCraft
-            <small>TRAINING INFRASTRUCTURE</small>
-          </div>
-        </a>
+      <aside
+        className={`sidebar${sidebarCollapsed ? " sidebar--collapsed" : ""}`}
+      >
+        <div className="sidebar-header">
+          <a
+            className="brand"
+            href="/"
+            aria-label="MLCraft home"
+            title="MLCraft home"
+          >
+            <div className="brand-icon">
+              <MinecraftIcon
+                name="grass_block"
+                size={42}
+                label="Minecraft grass block"
+              />
+            </div>
+            <div className="brand-name">
+              MLCraft
+              <small>TRAINING INFRASTRUCTURE</small>
+            </div>
+          </a>
+          <button
+            type="button"
+            className="sidebar-toggle"
+            onClick={toggleSidebar}
+            aria-label={
+              sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"
+            }
+            aria-expanded={!sidebarCollapsed}
+            aria-controls="dashboard-navigation"
+            title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            {sidebarCollapsed ? (
+              <PanelLeftOpen size={18} />
+            ) : (
+              <PanelLeftClose size={18} />
+            )}
+          </button>
+        </div>
         <div className="workspace-label">
           WORKSPACE <span>LOCAL</span>
         </div>
-        <nav>
+        <nav id="dashboard-navigation" aria-label="Dashboard sections">
           {(
             [
               { id: "overview", label: "Overview", icon: "compass" },
@@ -455,6 +495,9 @@ export default function Dashboard() {
             <button
               key={item.id}
               className={view === item.id ? "nav-active" : ""}
+              aria-label={item.label}
+              aria-current={view === item.id ? "page" : undefined}
+              title={sidebarCollapsed ? item.label : undefined}
               onClick={() => {
                 setView(item.id);
                 if (item.id === "training") {
@@ -466,7 +509,7 @@ export default function Dashboard() {
               }}
             >
               <MinecraftIcon name={item.icon} size={24} />
-              {item.label}
+              <span className="sidebar-nav-label">{item.label}</span>
               {item.id === "training" && (
                 <span className="nav-phase-count">
                   {completedPhases.length}/{trainingPhases.length}
@@ -480,7 +523,9 @@ export default function Dashboard() {
                   {liveAgentCount}
                 </span>
               )}
-              {view === item.id && <ChevronRight size={14} />}
+              {view === item.id && (
+                <ChevronRight className="sidebar-nav-arrow" size={14} />
+              )}
             </button>
           ))}
         </nav>
@@ -580,7 +625,7 @@ export default function Dashboard() {
                       : view === "server"
                         ? "The world behind your runs."
                         : view === "architecture"
-                          ? "Inside your agent models."
+                          ? "How the learning system fits together."
                           : view === "inputs"
                             ? "What your agents can perceive."
                             : view === "datasets"
@@ -599,7 +644,7 @@ export default function Dashboard() {
                       : view === "server"
                         ? "Manage the local Java process and inspect its console output."
                         : view === "architecture"
-                          ? "Inspect actual model structures, module configuration and hyperparameters."
+                          ? "Explore every component, its model records and measured performance."
                           : view === "inputs"
                             ? "Inspect selected, realtime inputs from each player connection."
                             : view === "datasets"
@@ -662,7 +707,7 @@ export default function Dashboard() {
                 {
                   label: "Active agents",
                   value: String(data?.capacity.activeAgents ?? 0),
-                  sub: `of ${data?.capacity.maxAgents ?? 16} available slots`,
+                  sub: `of ${data?.capacity.maxAgents ?? 64} available slots`,
                   icon: Users,
                 },
                 {
@@ -829,7 +874,12 @@ export default function Dashboard() {
               )}
               {phaseGoalStage && <GoalModels online={online} />}
               {trainingStage === "phase3a" && (
-                <MotorTraining runs={runs} online={online} act={act} />
+                <MotorTraining
+                  runs={runs}
+                  online={online}
+                  act={act}
+                  maxAgents={data?.capacity.maxAgents ?? 64}
+                />
               )}
               {trainingStage === "phase0" && (
                 <section className="phase-zero-preview">
@@ -934,8 +984,8 @@ export default function Dashboard() {
               )}
               {trainingStage &&
                 !phaseGoalStage &&
-                trainingStage !== "phase0" && (
-                trainingStage !== "phase3a" &&
+                trainingStage !== "phase0" &&
+                trainingStage !== "phase3a" && (
                   <PlannedTrainingStage id={trainingStage} />
                 )}
             </>
@@ -1395,7 +1445,11 @@ export default function Dashboard() {
             </>
           )}
           {view === "architecture" && (
-            <Architecture runs={data?.runs ?? []} online={online} />
+            <ArchitectureExplorer
+              runs={data?.runs ?? []}
+              metrics={data?.metrics ?? []}
+              online={online}
+            />
           )}
           {view === "datasets" && <Datasets online={online} />}
           {view === "progress" && (
@@ -1552,7 +1606,7 @@ export default function Dashboard() {
                       key: "agents",
                       label: "Agents",
                       min: 1,
-                      max: data?.capacity.maxAgents ?? 16,
+                      max: data?.capacity.maxAgents ?? 64,
                     },
                     {
                       key: "episodes",
@@ -1693,11 +1747,15 @@ export default function Dashboard() {
       )}
       {minimapOpen && (
         <AgentMinimap
-          agents={online && serverStatus === "running"
-            ? agents.filter((agent) =>
-                runs.find((run) => run.id === agent.runId)?.spec.mode === "minecraft",
-              )
-            : []}
+          agents={
+            online && serverStatus === "running"
+              ? agents.filter(
+                  (agent) =>
+                    runs.find((run) => run.id === agent.runId)?.spec.mode ===
+                    "minecraft",
+                )
+              : []
+          }
           onClose={() => setMinimapOpen(false)}
         />
       )}

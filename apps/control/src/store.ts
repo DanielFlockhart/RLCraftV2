@@ -12,6 +12,7 @@ import type {
   LogEntry,
   Metric,
   Run,
+  MotorFullRun,
   AgentPreset,
   ArenaPreset,
 } from "@mlcraft/core";
@@ -22,6 +23,7 @@ export class Store {
     this.db = new DatabaseSync(path);
     this.db.exec(`PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;
       CREATE TABLE IF NOT EXISTS runs(id TEXT PRIMARY KEY, status TEXT NOT NULL, body TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS motor_full_runs(id TEXT PRIMARY KEY, status TEXT NOT NULL, body TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS agents(id TEXT PRIMARY KEY, run_id TEXT NOT NULL, body TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS metrics(id INTEGER PRIMARY KEY, run_id TEXT NOT NULL, at INTEGER NOT NULL, body TEXT NOT NULL);
       CREATE INDEX IF NOT EXISTS metrics_run_at ON metrics(run_id,at);
@@ -43,6 +45,19 @@ export class Store {
         "INSERT INTO runs VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET status=excluded.status,body=excluded.body",
       )
       .run(run.id, run.status, JSON.stringify(run));
+  }
+  saveMotorFullRun(plan: MotorFullRun) {
+    this.db.prepare(
+      "INSERT INTO motor_full_runs VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET status=excluded.status,body=excluded.body",
+    ).run(plan.id, plan.status, JSON.stringify(plan));
+  }
+  motorFullRun(id: string): MotorFullRun | undefined {
+    const row = this.db.prepare("SELECT body FROM motor_full_runs WHERE id=?").get(id);
+    return row ? JSON.parse(String(row.body)) : undefined;
+  }
+  motorFullRuns(limit = 20): MotorFullRun[] {
+    return this.db.prepare("SELECT body FROM motor_full_runs ORDER BY rowid DESC LIMIT ?")
+      .all(limit).map((row) => JSON.parse(String(row.body)));
   }
   saveProgress(record: ProgressRecord) {
     const valid = progressRecordSchema.safeParse(record);
@@ -274,7 +289,9 @@ export class Store {
       .all()) {
       const run = JSON.parse(row.body as string) as Run;
       run.status = "interrupted";
-      run.error = "Control service restarted; rerun from dashboard.";
+      run.error = run.spec.stage === "motor"
+        ? "Control service restarted; continue from a compatible full-state checkpoint in Phase 3A if available."
+        : "Control service restarted; rerun from dashboard.";
       run.updatedAt = new Date().toISOString();
       this.saveRun(run);
       this.saveAgents(

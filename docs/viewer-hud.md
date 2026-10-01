@@ -4,7 +4,9 @@ ChilledVibe (and other names in the viewer plugin configuration) automatically r
 
 The sidebar shows the experiment stage and run ID, execution status/phase, generation number, completed steps, generation elapsed time, configured generation minimum, previous generation length, total runtime, overall progress, agent count, component and world. The boss bar shows current generation step progress and changes color for pause, completion, failure and disconnected control.
 
-**Generation currently means a training episode**, not an evolutionary population generation. Policies/trainers are still placeholders. Terrain world generations are separate from this training counter.
+During Phase 3A motor sessions, protected viewers also receive green target beacons and blue spawn rings for each agent in the selected run. Fly near an arena or spectate its agent to see the markers. They are particle packets sent only to viewer clients: no blocks or entities are placed, and training agents receive no marker packets. Marker positions follow each agent's arena and the current trial scenario. Markers disappear when the run ends, the HUD is hidden, or control updates become stale.
+
+For Phase 3A the HUD labels each training episode a **trial**. The dashboard separately counts completed NEAT evolutions after every genome finishes three shared trial rounds. Other stage policies/trainers remain placeholders. Terrain world generations are separate from these training counters.
 
 ## Timers
 

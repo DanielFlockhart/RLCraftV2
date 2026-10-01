@@ -27,7 +27,7 @@ npm.cmd run server:prepare
 
 The prepare script copies only the Paper 1.18.1 jar from `../RLCraft/server/` into a **new** runtime. It never copies old worlds, credentials, plugins, logs or EULA acceptance. It preserves existing runtime settings while enforcing the player capacity minimum and installing the viewer guard. To use another jar: `npm run server:prepare -- C:/path/to/paper.jar`; match `MC_VERSION` and your Java version to that server. The bundled Paper 1.18.1 build requires **Java 17** and rejects newer Java versions. Install Java 17 separately or use a portable runtime, then set `JAVA_PATH` in `.env` to its `bin/java.exe` on Windows. Restart `npm run dev` after changing `.env`.
 
-The server has **at least 100 total player slots**. Set `MC_MAX_PLAYERS` in `.env` to raise this minimum. Preparation and managed server startup preserve a higher existing limit and allow at least `MAX_AGENTS + 4` slots. `MAX_AGENTS` separately controls training-worker concurrency; player capacity does not automatically increase the number of training agents.
+The server has **at least 100 total player slots**. Set `MC_MAX_PLAYERS` in `.env` to raise this minimum. Preparation and managed server startup preserve a higher existing limit and allow at least `MAX_AGENTS + 4` slots. `MAX_AGENTS` defaults to 64 and separately controls training-worker concurrency; player capacity does not automatically increase the number of training agents. The default 64-agent limit is an admission limit, so measure server tick rate and memory use before running a full population on your hardware.
 
 Start/stop from the dashboard's Minecraft server page. Startup waits for Paper's readiness line, with a 180-second deadline. Stop returns immediately with a `stopping` status while Paper saves its world, and forces termination only after 60 seconds. Shutdown affects only the process V2 owns. Console commands use stdin, so no RCON secret is needed. Offline bot authentication and a loopback-only server are configured by default.
 
@@ -125,11 +125,13 @@ Policies/trainers receive only selected channels and fields. See [agent inputs](
 for native geometry vision, sound events/PCM, exact RGB/audio capture integration,
 sampling, recordings, limits and unavailable-data handling.
 
-The **Architecture** dashboard tab inspects registered models and actual run objects,
-with interactive graphs, parameter counts, module details and hyperparameters. It
-shows the current placeholders honestly. Connect your model/optimizer once through
-`inspectModel()` or `inspectModuleTree()`; subsequent changes are read from the
-objects rather than maintained in a separate diagram. See [model inspection](docs/model-inspection.md).
+The **Architecture** dashboard tab maps the full training roadmap into system
+components and shows each component's contracts, saved models and available
+performance metrics. Phase 1A reads saved network configuration and evaluation;
+Phase 3A reads motor run inspections and telemetry. Components without a model
+show their planned contracts without fabricated metrics. New goal models carry
+their roadmap stage ID so they appear under the right component automatically.
+See [model inspection](docs/model-inspection.md) for the runtime inspection API.
 
 1. Implement `Policy` in `packages/agents/src/policy.ts`: reset, act, close.
 2. Implement `Trainer`: consume transitions, update at episode boundaries, serialize model checkpoint state. Evaluation skips updates.

@@ -43,10 +43,11 @@ Active/queued arena footprints cannot overlap. Concurrent arena and unrestricted
 
 - Interior dimensions: width/depth `3–32`, height `3–16`.
 - Up to 32 regions, 8 stocked containers and 16 mobs per cell.
-- At most 65,536 shell/interior blocks and 128 configured mobs across a run.
+- At most 524,288 shell/interior blocks and 128 configured mobs across a run. A Phase 3A motor session uses 8,092 blocks per isolated agent, so its standard layout fits 64 agents.
+- The configured `MAX_AGENTS` default is 64. It applies across active workers; Minecraft's player-slot limit and the separate Fabric rendered-client limit do not raise it.
 - Up to 100 saved blueprints. Cells use the configured agent capacity; 100 player slots do not automatically increase worker limits.
 
-The plugin loads chunks asynchronously and performs up to 512 block placements per job per server tick. Preparation has a 120-second deadline. This reduces a large synchronous placement burst; it does not guarantee a particular TPS under all workloads.
+The plugin loads chunks asynchronously and performs up to 512 block placements per job per server tick. Preparation has a 300-second deadline. Motor sessions build their terrain once and teleport agents back to their spawn each generation; they do not rebuild the unchanged terrain each generation. This reduces repeated work but does not guarantee a particular TPS under all workloads.
 
 Blueprints live in SQLite under `DATA_DIR`, independently of world profiles. `config.json` stores the full run blueprint, origin, layout and reset frequency alongside its world generation and starting kit. Agent telemetry includes current position. If Firebase archiving is enabled, blueprint presets and run configurations are archived too. Include the database, run artifacts and server world directory in migration/backups.
 

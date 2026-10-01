@@ -15,7 +15,13 @@ import type {
   CaptureFrame,
   ArenaPoint,
 } from "@mlcraft/core";
-import { motorDelta, motorReward, motorTarget } from "../../../packages/core/src/motor.js";
+import {
+  motorDelta,
+  motorReachedTarget,
+  motorReward,
+  motorTarget,
+  motorTrialPlan,
+} from "../../../packages/core/src/motor.js";
 import {
   effectiveStepMs,
   DEFAULT_AGENT_SETUP,
@@ -44,8 +50,11 @@ const policyObservation = (
 ): import("@mlcraft/core").PolicyObservation => {
   if (!observation.inputs)
     throw new Error("Environment must expose selected agent input channels");
-  return { tick: observation.tick, inputs: observation.inputs,
-    ...(target ? { motor: motorDelta(observation, target) } : {}) };
+  return {
+    tick: observation.tick,
+    inputs: observation.inputs,
+    ...(target ? { motor: motorDelta(observation, target) } : {}),
+  };
 };
 let forceEndGeneration = false;
 let playbackJournal: Promise<void> = Promise.resolve();
@@ -105,7 +114,7 @@ function requestArena(username?: string) {
         setupRequests.delete(requestId);
         reject(new Error("Arena control acknowledgement timed out"));
       },
-      username ? 20000 : 130000,
+      username ? 20000 : 315000,
     );
     setupRequests.set(requestId, { resolve, reject, timer });
     send(
@@ -130,12 +139,19 @@ process.on(
   }) => {
     if (m.type === "sound-request") {
       try {
-        const member = members.find((member) => member.state.username === m.username);
-        if (!member?.env.sound) throw new Error("Agent sound control is unavailable");
+        const member = members.find(
+          (member) => member.state.username === m.username,
+        );
+        if (!member?.env.sound)
+          throw new Error("Agent sound control is unavailable");
         const result = await bounded(member.env.sound(m.muted), 4500);
         send({ type: "sound", requestId: m.requestId!, muted: result.muted });
       } catch (error) {
-        send({ type: "sound", requestId: m.requestId!, error: (error as Error).message });
+        send({
+          type: "sound",
+          requestId: m.requestId!,
+          error: (error as Error).message,
+        });
       }
       return;
     }
@@ -275,7 +291,9 @@ const dir = resolve(config.artifactDir, run.id);
 async function saveCheckpoint(checkpoint: Record<string, unknown>) {
   const path = resolve(dir, "checkpoint.json");
   const temporary = `${path}.${randomUUID()}.tmp`;
-  await writeFile(temporary, JSON.stringify(checkpoint, null, 2), { flag: "wx" });
+  await writeFile(temporary, JSON.stringify(checkpoint, null, 2), {
+    flag: "wx",
+  });
   await rename(temporary, path);
 }
 const plugin = trainingPlugins[spec.stage];
@@ -285,12 +303,28 @@ const members: Array<{
   env: Environment;
   policy: Policy;
   target?: ArenaPoint;
+  motorTrialActive?: boolean;
+  motorTrialDone?: boolean;
+  motorSuccess?: boolean;
+  motorSuccessSteps?: number;
 }> = [];
 function reportAgents() {
   send({ type: "agents", agents: members.map((m) => ({ ...m.state })) });
 }
+function meanAgentReward() {
+  const evaluated =
+    spec.stage === "motor"
+      ? members.filter((member) => member.motorTrialActive)
+      : members;
+  return evaluated.length
+    ? evaluated.reduce((sum, member) => sum + member.state.reward, 0) /
+        evaluated.length
+    : 0;
+}
 let lastModelSample = 0;
 async function reportModels(force = false) {
+  // Motor genomes only change when assignments rotate or evolution completes.
+  if (spec.stage === "motor" && !force) return;
   if (!force && Date.now() - lastModelSample < 2000) return;
   const snapshot: import("@mlcraft/core").ModelSnapshot = {
     source: "runtime",
@@ -427,9 +461,10 @@ async function main() {
   send({
     type: "log",
     level: "info",
-    message: spec.stage === "motor"
-      ? `Minecraft motor session ${spec.motor}: NEAT population evolves from target-reaching rewards.`
-      : `${spec.mode} · ${spec.component} · ${spec.stage}. Policy and trainer are placeholders; no learning is performed.`,
+    message:
+      spec.stage === "motor"
+        ? `Minecraft motor session ${spec.motor}: NEAT population evolves from target-reaching rewards.`
+        : `${spec.mode} · ${spec.component} · ${spec.stage}. Policy and trainer are placeholders; no learning is performed.`,
   });
   try {
     const registry = await backendRegistry;
@@ -453,7 +488,7 @@ async function main() {
       message: `Agent backend: ${backend.descriptor.label} ${backend.descriptor.version} (${backend.revision.slice(0, 12)}).`,
     });
     if (spec.mode === "minecraft" && spec.rules) await bounded(requestRules());
-    if (spec.arena) await bounded(requestArena(), 135000);
+    if (spec.arena) await bounded(requestArena(), 320000);
     for (let i = 0; i < spec.agents && !stopping; i++) {
       const username = `rl_${run.id.slice(0, 6)}_${i}`;
       const env: Environment = await bounded(
@@ -485,7 +520,11 @@ async function main() {
         reward: 0,
         health: 20,
       };
-      const member = { state, env, policy: plugin.createPolicy(username, spec) };
+      const member = {
+        state,
+        env,
+        policy: plugin.createPolicy(username, spec),
+      };
       members.push(member);
       if (spec.mode === "minecraft") {
         const supported = !!env.watchProgress && config.MC_VERSION === "1.18.1";
@@ -626,8 +665,13 @@ async function main() {
       tickTotal = 0;
       tickCount = 0;
     }
-    for (let episode = 1; episode <= spec.episodes && !stopping; episode++) {
-      if (episode > 1) await hold();
+    const firstEpisode = spec.motorResume
+      ? Number((await bounded(trainer.checkpoint())).episode) + 1
+      : 1;
+    if (firstEpisode > 1)
+      send({ type: "progress", episode: firstEpisode - 1, progress: (firstEpisode - 1) / spec.episodes });
+    for (let episode = firstEpisode; episode <= spec.episodes && !stopping; episode++) {
+      if (episode > firstEpisode) await hold();
       if (stopping) break;
       timingEpisode = episode;
       timingTick = 0;
@@ -640,10 +684,10 @@ async function main() {
       send({
         type: "log",
         level: "info",
-        message: `Preparing generation ${episode}/${spec.episodes}.`,
+        message: `Preparing ${spec.stage === "motor" ? "trial episode" : "generation"} ${episode}/${spec.episodes}.`,
       });
       await bounded(prepareStage(spec.stage, episode));
-      if (episode > 1) {
+      if (episode > firstEpisode) {
         for (const member of members) {
           member.state.status = "resetting";
           await bounded(member.env.apply({}));
@@ -651,20 +695,41 @@ async function main() {
         }
         reportAgents();
       }
-      if (episode > 1 && spec.arena?.resetEachEpisode) {
+      if (episode > firstEpisode && spec.arena?.resetEachEpisode) {
         for (const member of members) await bounded(member.env.apply({}));
-        await bounded(requestArena(), 135000);
+        await bounded(requestArena(), 320000);
       }
-      if (episode > 1 && setup?.applyEachEpisode)
+      if (episode > firstEpisode && setup?.applyEachEpisode)
         for (let i = 0; i < members.length; i++)
           await bounded(members[i].env.reset!(memberSetup(i)!));
+      if (spec.stage === "motor")
+        for (const member of members) await bounded(member.env.apply({}));
       // Spawn placement resets every generation even when terrain is preserved.
       if (episode > 1 && spec.arena)
         for (let i = 0; i < members.length; i++)
           await bounded(members[i].env.teleport!(arenaSpawn(spec.arena, i)));
       for (const m of members) {
-        if (spec.stage === "motor" && spec.motor && spec.arena)
-          m.target = motorTarget(spec.arena, spec.motor, Number(m.state.id.slice(m.state.id.lastIndexOf(":") + 1)), episode, spec.seed);
+        if (spec.stage === "motor" && spec.motor && spec.arena) {
+          const index = Number(
+            m.state.id.slice(m.state.id.lastIndexOf(":") + 1),
+          );
+          const trial = motorTrialPlan(episode, spec.agents);
+          m.motorTrialActive =
+            trial.batch * spec.agents + index < trial.population;
+          m.motorTrialDone = !m.motorTrialActive;
+          m.motorSuccess = false;
+          m.motorSuccessSteps = undefined;
+          m.state.targetReached = false;
+          m.state.targetSteps = undefined;
+          m.target = motorTarget(
+            spec.arena,
+            spec.motor,
+            index,
+            episode,
+            spec.seed,
+            spec.agents,
+          );
+        }
         await bounded(m.policy.reset(spec.seed + episode));
         m.state.reward = 0;
         m.state.status = "active";
@@ -681,10 +746,12 @@ async function main() {
       send({
         type: "log",
         level: "info",
-        message: spec.stage === "motor"
-          ? `Generation ${episode} ready: ${members.length} motor agents. Evolved policies are controlling movement.`
-          : `Generation ${episode} ready: ${members.length} agents. Waiting for policy actions (placeholder policies remain idle).`,
+        message:
+          spec.stage === "motor"
+            ? `Trial episode ${episode} ready: ${members.filter((member) => member.motorTrialActive).length} genomes are being evaluated.`
+            : `Generation ${episode} ready: ${members.length} agents. Waiting for policy actions (placeholder policies remain idle).`,
       });
+      let motorAllDone = false;
       for (let tick = 1; !stopping; tick++) {
         await hold();
         if (
@@ -697,13 +764,17 @@ async function main() {
           break;
         const began = performance.now();
         const stepMs = effectiveStepMs(spec, playback.speed);
+        let completedSteps = 0;
         await Promise.all(
           members.map(async (m, index) => {
+            if (spec.stage === "motor" && m.motorTrialDone) return;
+            const stepStarted = performance.now();
             const before = await bounded(
               Promise.resolve(m.env.observe(m.state.ticks)),
               5000,
             );
             if (before.health <= 0) {
+              if (spec.stage === "motor") m.motorTrialDone = true;
               await respawnMember(m, index);
               return;
             }
@@ -711,16 +782,27 @@ async function main() {
             const action =
               spec.component === "environment"
                 ? {}
-                : await bounded(m.policy.act(policyObservation(before, m.target)), 5000);
+                : await bounded(
+                    m.policy.act(policyObservation(before, m.target)),
+                    5000,
+                  );
             await bounded(m.env.apply(action), 10000);
-            // The sample interval lets Minecraft physics advance before observation.
-            await sleep(stepMs);
+            // Keep the requested interval from step start without adding a full
+            // extra sleep when observation or action processing is already slow.
+            const remainingMs = stepMs - (performance.now() - stepStarted);
+            if (remainingMs > 0) await sleep(remainingMs);
             const after = await bounded(
               Promise.resolve(m.env.observe(++m.state.ticks)),
               5000,
             );
             await recordInputs(m.state.username, "after", after.inputs);
-            const value = m.target ? motorReward(before, after, m.target) : reward(spec.stage, before, after);
+            const value = m.target
+              ? motorReward(before, after, m.target, m.motorSuccess)
+              : reward(spec.stage, before, after);
+            const reached =
+              after.health > 0 &&
+              !!m.target &&
+              motorReachedTarget(after, m.target);
             m.state.reward += value;
             m.state.health = after.health;
             m.state.food = after.food;
@@ -734,6 +816,7 @@ async function main() {
                   reward: value,
                   nextObservation: policyObservation(after, m.target),
                   done:
+                    reached ||
                     tick >= playback.ticksPerGeneration ||
                     (playback.generationSeconds !== undefined &&
                       trainingElapsedMs + performance.now() - began >=
@@ -743,23 +826,37 @@ async function main() {
                 }),
                 5000,
               );
+            completedSteps++;
+            if (spec.stage === "motor" && reached) {
+              m.motorTrialDone = true;
+              m.motorSuccess = true;
+              m.motorSuccessSteps = tick;
+              m.state.targetReached = true;
+              m.state.targetSteps = tick;
+              await bounded(m.env.apply({}), 5000);
+            }
             if (after.health <= 0) {
+              if (spec.stage === "motor") m.motorTrialDone = true;
               await respawnMember(m, index);
             }
           }),
         );
-        sampleSteps += members.length;
+        sampleSteps += completedSteps;
         const stepDuration = performance.now() - began;
         trainingElapsedMs += stepDuration;
         tickTotal += stepDuration;
         tickCount++;
         const now = performance.now();
         timingTick = tick;
+        motorAllDone =
+          spec.stage === "motor" &&
+          members.every((member) => member.motorTrialDone);
         const generationDone =
           tick >= playback.ticksPerGeneration ||
           (playback.generationSeconds !== undefined &&
             trainingElapsedMs >= playback.generationSeconds * 1000) ||
-          forceEndGeneration;
+          forceEndGeneration ||
+          motorAllDone;
         if (playback.manual && playback.manual.kind !== "generation") {
           playback.manual.remaining -=
             playback.manual.kind === "steps" ? 1 : stepDuration / 1000;
@@ -775,8 +872,7 @@ async function main() {
             at: Date.now(),
             runId: run.id,
             episode,
-            reward:
-              members.reduce((n, m) => n + m.state.reward, 0) / members.length,
+            reward: meanAgentReward(),
             stepsPerSecond: sampleSteps / ((now - lastSample) / 1000),
             tickMs: tickTotal / tickCount,
             workerMemoryMb: process.memoryUsage().rss / 1024 / 1024,
@@ -813,18 +909,125 @@ async function main() {
       }
       if (!stopping) {
         const report =
-          spec.component === "pipeline"
+          spec.component === "pipeline" || spec.stage === "motor"
             ? await bounded(trainer.endEpisode(episode))
             : {};
-        if (spec.stage === "motor")
+        const successful = members.filter((member) => member.motorSuccess);
+        const activeTrials = members.filter(
+          (member) => member.motorTrialActive,
+        ).length;
+        const motorOutcome =
+          spec.stage === "motor"
+            ? {
+                trials: activeTrials,
+                successes: successful.length,
+                successRate: activeTrials
+                  ? successful.length / activeTrials
+                  : 0,
+                meanSuccessSteps: successful.length
+                  ? successful.reduce(
+                      (sum, member) => sum + (member.motorSuccessSteps ?? 0),
+                      0,
+                    ) / successful.length
+                  : null,
+                evolutionGeneration: report.generation ?? 0,
+                species: report.species ?? 1,
+                bestFitness: report.bestFitness ?? 0,
+                generationBestFitness: report.generationBestFitness ?? 0,
+              }
+            : undefined;
+        let motorCheckpoint: Record<string, unknown> | undefined;
+        if (spec.stage === "motor") {
+          motorCheckpoint = await bounded(trainer.checkpoint());
           await saveCheckpoint({
-            ...(await bounded(trainer.checkpoint())),
+            ...motorCheckpoint,
             runId: run.id,
             stage: spec.stage,
             seed: spec.seed,
             episode,
             createdAt: new Date().toISOString(),
           });
+        }
+        if (motorOutcome) {
+          const trialMetric: import("@mlcraft/core").Metric = {
+            kind: "motor-trial",
+            at: Date.now(),
+            runId: run.id,
+            episode,
+            reward: meanAgentReward(),
+            stepsPerSecond: 0,
+            tickMs: 0,
+            workerMemoryMb: process.memoryUsage().rss / 1024 / 1024,
+            motor: {
+              trials: motorOutcome.trials,
+              successes: motorOutcome.successes,
+              successRate: motorOutcome.successRate,
+              meanSuccessSteps: motorOutcome.meanSuccessSteps,
+            },
+          };
+          send({
+            type: "metric",
+            metric: trialMetric,
+            agents: members.map((m) => ({ ...m.state })),
+          });
+          await appendFile(
+            resolve(dir, "metrics.jsonl"),
+            JSON.stringify(trialMetric) + "\n",
+          );
+          await appendFile(
+            resolve(dir, "motor-trials.jsonl"),
+            JSON.stringify({ episode, at: trialMetric.at, ...motorOutcome }) +
+              "\n",
+          );
+        }
+        if (spec.stage === "motor" && report.generation) {
+          const previous = motorTrialPlan(episode, spec.agents).evolution;
+          if (report.generation > previous) {
+            const speciesHistory = motorCheckpoint?.speciesHistory as
+              | Array<{
+                  species: NonNullable<
+                    import("@mlcraft/core").Metric["neat"]
+                  >["speciesDetails"];
+                }>
+              | undefined;
+            const evolutionMetric: import("@mlcraft/core").Metric = {
+              kind: "evolution",
+              at: Date.now(),
+              runId: run.id,
+              episode,
+              reward: meanAgentReward(),
+              stepsPerSecond: 0,
+              tickMs: 0,
+              workerMemoryMb: process.memoryUsage().rss / 1024 / 1024,
+              neat: {
+                generation: report.generation,
+                species: report.species ?? 1,
+                bestFitness: report.bestFitness ?? 0,
+                population: report.population ?? Math.max(8, spec.agents),
+                generationBestFitness: report.generationBestFitness ?? 0,
+                speciesDetails: speciesHistory?.at(-1)?.species,
+              },
+            };
+            send({
+              type: "metric",
+              metric: evolutionMetric,
+              agents: members.map((m) => ({ ...m.state })),
+            });
+            await appendFile(
+              resolve(dir, "metrics.jsonl"),
+              JSON.stringify(evolutionMetric) + "\n",
+            );
+            await appendFile(
+              resolve(dir, "evolution.jsonl"),
+              JSON.stringify({
+                runId: run.id,
+                episode,
+                at: evolutionMetric.at,
+                ...evolutionMetric.neat,
+              }) + "\n",
+            );
+          }
+        }
         await reportModels(true);
         await appendFile(
           resolve(dir, "episodes.jsonl"),
@@ -833,11 +1036,18 @@ async function main() {
             steps: timingTick,
             trainingElapsedMs,
             playback: structuredClone(playback),
-            endedBy: forceEndGeneration ? "manual" : "limit",
+            endedBy: forceEndGeneration
+              ? "manual"
+              : motorAllDone && motorOutcome?.successes === motorOutcome?.trials
+                ? "targets-reached"
+                : motorAllDone
+                  ? "trials-finished"
+                  : "limit",
             durationMs:
               performance.now() - generationStarted - generationPausedMs,
             totalElapsedMs: performance.now() - started,
             report,
+            ...(motorOutcome ? { motor: motorOutcome } : {}),
             agents: members.map((m) => m.state),
             at: Date.now(),
           }) + "\n",
@@ -859,7 +1069,7 @@ async function main() {
         send({
           type: "log",
           level: "info",
-          message: `Generation ${episode} finished after ${timingTick} steps.`,
+          message: `${spec.stage === "motor" ? "Trial episode" : "Generation"} ${episode} finished after ${timingTick} steps.`,
         });
       }
     }
@@ -880,13 +1090,22 @@ async function main() {
       // The full NEAT population is stored on disk. Keep IPC completion small and
       // wait for the send callback before the worker disconnects.
       await new Promise<void>((resolve, reject) => {
-        if (!process.connected) return reject(new Error("Control service disconnected before completion"));
-        process.send?.({ type: "done", checkpoint: {
-          kind: checkpoint.kind,
-          generation: checkpoint.generation,
-          bestFitness: checkpoint.bestFitness,
-          runId: run.id,
-        } }, (error) => error ? reject(error) : resolve());
+        if (!process.connected)
+          return reject(
+            new Error("Control service disconnected before completion"),
+          );
+        process.send?.(
+          {
+            type: "done",
+            checkpoint: {
+              kind: checkpoint.kind,
+              generation: checkpoint.generation,
+              bestFitness: checkpoint.bestFitness,
+              runId: run.id,
+            },
+          },
+          (error) => (error ? reject(error) : resolve()),
+        );
       });
     }
   } finally {

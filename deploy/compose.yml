@@ -11,7 +11,7 @@ services:
     environment:
       CONTROL_TOKEN_FILE: /run/secrets/control_token
       MAX_CONCURRENT_RUNS: ${MAX_CONCURRENT_RUNS:-2}
-      MAX_AGENTS: ${MAX_AGENTS:-16}
+      MAX_AGENTS: ${MAX_AGENTS:-64}
       MC_MAX_PLAYERS: ${MC_MAX_PLAYERS:-100}
       MC_BIND_HOST: 0.0.0.0
       MC_HOST: 127.0.0.1

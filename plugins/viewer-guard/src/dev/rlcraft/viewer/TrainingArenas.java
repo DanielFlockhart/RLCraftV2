@@ -97,7 +97,7 @@ final class TrainingArenas implements Listener {
             String layout = spec.getString("layout");
             if (!Set.of("shared", "individual").contains(layout)) throw new IllegalArgumentException("Invalid layout");
             int count = layout.equals("shared") ? 1 : agents;
-            if ((long)(width+2)*(depth+2)*(height+2)*count > 65536 || mobCount > 16 || mobCount*count > 128) throw new IllegalArgumentException("Arena block/mob budget exceeded");
+            if ((long)(width+2)*(depth+2)*(height+2)*count > 524288 || mobCount > 16 || mobCount*count > 128) throw new IllegalArgumentException("Arena block/mob budget exceeded");
             int columns = integer(spec.get("columns"), 1, 16), gap = integer(spec.get("gap"), 2, 32);
             ConfigurationSection origin = Objects.requireNonNull(spec.getConfigurationSection("origin"));
             int x = integer(origin.get("x"), -29999984, 29999984), y = integer(origin.get("y"), world.getMinHeight(), world.getMaxHeight()-1), z = integer(origin.get("z"), -29999984, 29999984);
@@ -185,7 +185,7 @@ final class TrainingArenas implements Listener {
         }
         boolean active() { return jobs.get(plan.run)==this; }
         String ticket(Point chunk) { return plan.world.getUID()+":"+chunk.x+":"+chunk.z; }
-        void start() { deadline=Bukkit.getScheduler().runTaskLater(plugin, () -> finish("Arena preparation exceeded 120 seconds"), 2400L); preload(0); }
+        void start() { deadline=Bukkit.getScheduler().runTaskLater(plugin, () -> finish("Arena preparation exceeded 300 seconds"), 6000L); preload(0); }
         void preload(int index) {
             if (!active()) return;
             if (index == chunks.size()) {

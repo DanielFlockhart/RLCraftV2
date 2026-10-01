@@ -2,6 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Run } from "@mlcraft/core";
 import { viewerHudRuns } from "../apps/control/src/viewer-hud.js";
+import { motorArena, motorTarget } from "../packages/core/src/motor.js";
+import { arenaSpawn } from "../packages/core/src/arenas.js";
 
 const run: Run = {
   id: "12345678-1234-1234-1234-123456789abc",
@@ -88,5 +90,54 @@ test("HUD limits payloads, excludes simulator experiments and keeps queued timin
   assert.equal(
     viewerHudRuns([...backlog, { ...run, status: "paused" }])[0].status,
     "paused",
+  );
+});
+test("motor markers follow each agent's actual episode target and disappear after the run", () => {
+  const arena = motorArena("M1", 42);
+  const motorRun: Run = {
+    ...run,
+    spec: { ...run.spec, stage: "motor", motor: "M1", arena, agents: 2 },
+  };
+  const projected = viewerHudRuns([motorRun])[0];
+  assert.equal(projected.motor, "M1");
+  assert.deepEqual(
+    projected.motorMarkers,
+    [0, 1].map((index) => ({
+      index,
+      spawn: arenaSpawn(arena, index),
+      target: motorTarget(
+        arena,
+        "M1",
+        index,
+        motorRun.episode,
+        motorRun.spec.seed,
+        motorRun.spec.agents,
+      ),
+    })),
+  );
+  assert.deepEqual(
+    viewerHudRuns([{ ...motorRun, status: "completed" }])[0].motorMarkers,
+    [],
+  );
+});
+test("64 motor markers fit in the viewer HUD console payload", () => {
+  const motorRun: Run = {
+    ...run,
+    spec: {
+      ...run.spec,
+      stage: "motor",
+      motor: "M0",
+      arena: motorArena("M0", 42),
+      agents: 64,
+    },
+  };
+  const projection = viewerHudRuns([motorRun]);
+  assert.equal(projection[0].motorMarkers.length, 64);
+  const payload = Buffer.from(JSON.stringify({ runs: projection })).toString(
+    "base64url",
+  );
+  assert.ok(
+    payload.length <= 32768,
+    `HUD payload has ${payload.length} characters`,
   );
 });

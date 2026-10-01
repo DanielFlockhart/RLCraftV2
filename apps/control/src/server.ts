@@ -279,7 +279,7 @@ export class MinecraftServer {
       requestId,
       runId,
       `rlcraftarena ${requestId} ${runId} ${payload}`,
-      125000,
+      310000,
     );
     this.log(
       `Training arena prepared for run ${runId} (${arena.layout}, ${agents} agents)`,

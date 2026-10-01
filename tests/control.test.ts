@@ -768,6 +768,27 @@ test("motor sessions require a prepared superflat world and a selected curriculu
   assert.equal(session.statusCode, 400);
   assert.match(session.json().error, /Prepare the server first/);
 });
+test("Full Run rejects incomplete and unsafe stage sequences before launching", async () => {
+  const stages = Array.from({ length: 9 }, (_, index) => ({
+    session: `M${index}`,
+    agents: 4,
+    episodes: index === 8 ? 12 : 24,
+    ticksPerEpisode: 80,
+    tickMs: 100,
+    seed: 42 + index,
+    backend: "mineflayer",
+    minSuccessRate: 0,
+    maxAttempts: 1,
+  }));
+  assert.equal((await post("/phase3a/full-runs", { stages: stages.slice(0, 8) })).statusCode, 400);
+  assert.equal((await post("/phase3a/full-runs", { stages: stages.map((stage, index) =>
+    index === 8 ? { ...stage, seed: stages[7].seed } : stage) })).statusCode, 400);
+  assert.equal((await post("/phase3a/full-runs", { stages: stages.map((stage, index) =>
+    index === 0 ? { ...stage, episodes: 1 } : stage) })).statusCode, 400);
+  const plans = await app.inject({ url: "/phase3a/full-runs", headers });
+  assert.equal(plans.statusCode, 200);
+  assert.deepEqual(plans.json(), []);
+});
 test("default Minecraft admission requires reset support and simulator players cannot be watched", async () => {
   const absentServer = await post("/runs", { stage: "movement", agents: 1 });
   assert.equal(absentServer.statusCode, 400);

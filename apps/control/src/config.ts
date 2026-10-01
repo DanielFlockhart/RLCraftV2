@@ -16,7 +16,7 @@ const env = z
     CONTROL_HOST: z.string().min(1).default("127.0.0.1"),
     CONTROL_PORT: z.coerce.number().int().min(1024).max(65535).default(4100),
     MAX_CONCURRENT_RUNS: z.coerce.number().int().min(1).max(8).default(2),
-    MAX_AGENTS: z.coerce.number().int().min(1).max(128).default(16),
+    MAX_AGENTS: z.coerce.number().int().min(1).max(128).default(64),
     MAX_RENDER_CLIENTS: z.coerce.number().int().min(1).max(128).default(2),
     MC_HOST: z.string().default("127.0.0.1"),
     MC_BIND_HOST: z.string().default("127.0.0.1"),

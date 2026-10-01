@@ -65,6 +65,8 @@ export interface GoalEvaluation {
 }
 export interface GoalModelJob {
   id: string;
+  /** Training roadmap stage that owns this model. */
+  stageId?: string;
   datasetId: string;
   parentId?: string;
   trainingMode?: "from_scratch" | "fine_tune" | "continue";

@@ -3,10 +3,13 @@ import { mkdtemp, mkdir, copyFile, cp, writeFile, rm } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { resolve, join, sep } from "node:path";
 import { createServer } from "node:net";
+import type { EventEmitter } from "node:events";
 import mineflayer, { type Bot } from "mineflayer";
 import type { Run } from "@mlcraft/core";
+import { motorArena } from "../packages/core/src/motor.js";
 import { Store } from "../apps/control/src/store.js";
 import { MinecraftServer } from "../apps/control/src/server.js";
+import { viewerHudRuns } from "../apps/control/src/viewer-hud.js";
 import { config, root } from "../apps/control/src/config.js";
 import { buildViewerPlugin } from "./build-viewer-plugin.js";
 
@@ -310,6 +313,57 @@ try {
   );
   server.syncViewerHud();
   await until(() => line(viewer, "Live training state"), "control reconnect");
+  const beforeLegacy = store
+    .logs()
+    .filter((entry) => entry.message.includes("HUD sync rejected")).length;
+  const legacyRuns = viewerHudRuns([run]).map(
+    ({ motor, motorMarkers, ...row }) => row,
+  );
+  server.command(
+    `rlcrafthudsync ${Buffer.from(JSON.stringify({ runs: legacyRuns })).toString("base64url")}`,
+  );
+  await new Promise((resolve) => setTimeout(resolve, 350));
+  assert.equal(
+    store.logs().filter((entry) => entry.message.includes("HUD sync rejected"))
+      .length,
+    beforeLegacy,
+    "previous control payload remains accepted",
+  );
+  const markerArena = {
+    ...motorArena("M0", 42),
+    origin: { x: -5, y: 3, z: -5 },
+  };
+  const motorRun: Run = {
+    ...run,
+    id: "fedcba98-1234-1234-1234-123456789abc",
+    status: "running",
+    updatedAt: new Date().toISOString(),
+    episode: 1,
+    spec: {
+      ...run.spec,
+      stage: "motor",
+      motor: "M0",
+      arena: markerArena,
+      agents: 1,
+    },
+    world: { levelName: "viewer-test" } as Run["world"],
+  };
+  let viewerParticles = 0,
+    agentParticles = 0;
+  (viewer._client as unknown as EventEmitter).on(
+    "world_particles",
+    () => viewerParticles++,
+  );
+  (agent._client as unknown as EventEmitter).on(
+    "world_particles",
+    () => agentParticles++,
+  );
+  store.saveRun(motorRun);
+  server.syncViewerHud();
+  viewer.chat("/rlcrafthud fedcba98");
+  await until(() => line(viewer, "motor M0"), "motor viewer marker legend");
+  await until(() => viewerParticles > 0, "viewer-only motor particles");
+  assert.equal(agentParticles, 0, "agent must not receive target markers");
   viewer.quit();
   await until(
     () =>
@@ -327,7 +381,7 @@ try {
     "HUD restored after rejoin",
   );
   console.log(
-    "PASS: viewer protection; personal sidebar and boss bar; generation progress/timers; multiple experiment selection; pause, hide/show, stale-control and reconnect; no HUD packets sent to agents.",
+    "PASS: viewer protection; personal sidebar and boss bar; motor target particles visible only to viewers; generation progress/timers; multiple experiment selection; pause, hide/show, stale-control and reconnect; no HUD packets sent to agents.",
   );
 } finally {
   for (const bot of bots) bot.quit();

@@ -2,7 +2,7 @@
 
 Use **Training → New run → Training pace and generation length** to select 0.25×, 0.5×, 1×, 2×, 4× or 8× sampling speed. Set the generation limit in completed steps or active training seconds, and optionally start paused after preparation. Select a run to open **Generation and playback controls** for live adjustments.
 
-Generations currently mean training episodes. Policies and trainers remain placeholders.
+The playback generation counter measures training episodes. Phase 3A calls these trial episodes and separately counts completed NEAT evolutions; other stage policies and trainers remain placeholders.
 
 ## What speed controls
 

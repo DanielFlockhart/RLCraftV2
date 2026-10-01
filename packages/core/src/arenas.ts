@@ -1,4 +1,14 @@
 import type { ArenaSpec, ArenaPoint } from "./index.js";
+export const ARENA_BLOCK_BUDGET = 524_288;
+export function arenaBlockCount(arena: ArenaSpec, agents: number) {
+  const cells = arena.layout === "shared" ? 1 : agents;
+  return (
+    (arena.blueprint.width + 2) *
+    (arena.blueprint.depth + 2) *
+    (arena.blueprint.height + 2) *
+    cells
+  );
+}
 export function arenaCellOrigin(arena: ArenaSpec, index: number): ArenaPoint {
   const cell = arena.layout === "shared" ? 0 : index;
   return {

@@ -10,6 +10,9 @@ import {
   DEFAULT_AGENT_SETUP,
   DEFAULT_TRAINING_RULES,
   type Snapshot,
+  type MotorFullRun,
+  type MotorFullRunStage,
+  type Run,
 } from "@mlcraft/core";
 import {
   trainingRulesSchema,
@@ -51,7 +54,10 @@ import {
   renderSchema,
 } from "../../../packages/runtime/src/fabric.js";
 import { backendIdSchema } from "../../../packages/agents/src/backends/registry.js";
-import { motorArena, motorSessions } from "../../../packages/core/src/motor.js";
+import { motorArena, motorSessions, motorTrialPlan } from "../../../packages/core/src/motor.js";
+import { MotorNeat } from "../../../packages/agents/src/motor-neat.js";
+import { motorInputConfig } from "./motor-inputs.js";
+import { summarizeMotorTrials } from "./motor-full-run.js";
 import {
   arenaSpecSchema,
   arenaPresetSchema,
@@ -71,6 +77,9 @@ export const runSchema = z
     ]),
     motor: z.enum(["M0", "M1", "M2", "M3", "M4", "M5", "M6", "M7", "M8"]).optional(),
     motorSource: z.uuid().optional(),
+    motorResume: z.uuid().optional(),
+    motorFullRunId: z.uuid().optional(),
+    motorFullRunStage: z.number().int().min(0).max(8).optional(),
     mode: z.enum(["simulator", "minecraft"]).default("minecraft"),
     backend: backendIdSchema.optional(),
     render: renderSchema.optional(),
@@ -99,13 +108,22 @@ export const runSchema = z
       ctx.addIssue({ code: "custom", path: ["motor"], message: "Motor session requires the motor stage" });
     if (spec.motorSource && spec.stage !== "motor")
       ctx.addIssue({ code: "custom", path: ["motorSource"], message: "Motor source requires the motor stage" });
+    if (spec.motorResume && (spec.stage !== "motor" || spec.motorSource))
+      ctx.addIssue({ code: "custom", path: ["motorResume"], message: "Motor resume requires the motor stage and cannot use a champion source" });
+    if ((spec.motorFullRunId === undefined) !== (spec.motorFullRunStage === undefined) ||
+        (spec.motorFullRunId && spec.stage !== "motor"))
+      ctx.addIssue({ code: "custom", path: ["motorFullRunId"], message: "Full Run ID and stage require each other and the motor stage" });
   })
   .transform((spec) => ({
     ...spec,
     backend:
       spec.backend ??
       (spec.mode === "simulator" ? "simulator" : config.MC_AGENT_BACKEND),
-    inputs: spec.inputs ?? structuredClone(defaultInputConfig),
+    inputs:
+      spec.inputs ??
+      (spec.stage === "motor"
+        ? motorInputConfig()
+        : structuredClone(defaultInputConfig)),
     ...(spec.mode === "minecraft" && !spec.rules
       ? { rules: structuredClone(DEFAULT_TRAINING_RULES) }
       : {}),
@@ -113,6 +131,32 @@ export const runSchema = z
       ? { setup: structuredClone(DEFAULT_AGENT_SETUP) }
       : {}),
   }));
+const fullRunStageSchema = z.object({
+  session: z.enum(["M0", "M1", "M2", "M3", "M4", "M5", "M6", "M7", "M8"]),
+  agents: z.number().int().min(1).max(config.MAX_AGENTS),
+  episodes: z.number().int().min(1).max(100000),
+  ticksPerEpisode: z.number().int().min(1).max(100000),
+  tickMs: z.number().int().min(20).max(5000),
+  seed: z.number().int().min(0).max(2147483647),
+  backend: z.enum(["mineflayer", "fabric"]),
+  minSuccessRate: z.number().min(0).max(1).default(0),
+  minBestFitness: z.number().finite().optional(),
+  maxAttempts: z.number().int().min(1).max(10).default(1),
+}).strict();
+const fullRunRequestSchema = z.object({
+  stages: z.array(fullRunStageSchema).length(9),
+}).strict().superRefine(({ stages: configured }, ctx) => {
+  configured.forEach((stage, index) => {
+    if (stage.session !== motorSessions[index].id)
+      ctx.addIssue({ code: "custom", path: ["stages", index, "session"], message: `Expected ${motorSessions[index].id}` });
+    if (index < 8 && stage.episodes < motorTrialPlan(1, stage.agents).episodesPerEvolution)
+      ctx.addIssue({ code: "custom", path: ["stages", index, "episodes"], message: "Complete at least one full NEAT evolution" });
+    if (index === 8 && (stage.maxAttempts !== 1 || stage.minBestFitness !== undefined))
+      ctx.addIssue({ code: "custom", path: ["stages", index], message: "M8 is frozen evaluation and runs once without a fitness gate" });
+  });
+  if (configured[7]?.seed === configured[8]?.seed)
+    ctx.addIssue({ code: "custom", path: ["stages", 8, "seed"], message: "M8 needs a different terrain seed from M7" });
+});
 export function createApp(
   store = new Store(resolve(config.dataDir, "control.sqlite")),
 ) {
@@ -207,16 +251,55 @@ export function createApp(
     expectedBackendRevision?: string,
   ) {
     if (spec.stage === "motor") {
+      const activePlan = store.motorFullRuns().find((plan) => ["running", "paused"].includes(plan.status));
+      if (activePlan && spec.motorFullRunId !== activePlan.id)
+        throw new Error("A Phase 3A Full Run is active; pause or stop it before starting a separate motor run");
       if (store.runs(1000).some((run) => run.spec.mode === "minecraft" && ["queued", "running", "paused", "pausing"].includes(run.status)))
         throw new Error("Motor sessions run alone; finish or cancel other Minecraft runs first");
+      const source = spec.motorSource ? store.getRun(spec.motorSource) : undefined;
+      if (spec.motorResume) {
+        const previous = store.getRun(spec.motorResume);
+        if (!previous || !["completed", "interrupted", "failed", "cancelled"].includes(previous.status) ||
+            previous.spec.stage !== "motor" || previous.spec.component !== "pipeline" ||
+            previous.spec.motor !== spec.motor || previous.spec.agents !== spec.agents ||
+            previous.spec.seed !== spec.seed || previous.spec.backend !== spec.backend ||
+            previous.spec.ticksPerEpisode !== spec.ticksPerEpisode ||
+            previous.spec.tickMs !== spec.tickMs ||
+            previous.spec.speed !== spec.speed ||
+            previous.spec.generationSeconds !== spec.generationSeconds ||
+            JSON.stringify(previous.spec.arena) !== JSON.stringify(spec.arena) ||
+            JSON.stringify(previous.spec.inputs) !== JSON.stringify(spec.inputs) ||
+            JSON.stringify(previous.spec.rules) !== JSON.stringify(spec.rules) ||
+            JSON.stringify(previous.spec.setup) !== JSON.stringify(spec.setup) ||
+            JSON.stringify(previous.spec.render) !== JSON.stringify(spec.render))
+          throw new Error("Resume requires a finished run with the same session, population, seed, backend, and training settings");
+        const checkpoint = JSON.parse(await readFile(resolve(config.artifactDir, previous.id, "checkpoint.json"), "utf8"));
+        const completedEpisodes = checkpoint.resumeState
+          ? checkpoint.episode
+          : checkpoint.generation * motorTrialPlan(1, spec.agents).episodesPerEvolution;
+        if (checkpoint.kind !== "neat-rl" || checkpoint.session !== spec.motor ||
+            checkpoint.seed !== spec.seed ||
+            !Number.isSafeInteger(completedEpisodes) || completedEpisodes < 0 ||
+            completedEpisodes >= spec.episodes)
+          throw new Error("Run has no compatible population checkpoint or no new episodes to train");
+        new MotorNeat(spec, config.artifactDir);
+      }
       if (spec.motorSource) {
-        const source = store.getRun(spec.motorSource);
         if (source?.status !== "completed" || source.spec.stage !== "motor")
           throw new Error("Motor source must be a completed motor run");
       }
+      if (spec.motor === "M8") {
+        if (source?.spec.motor !== "M7" || source.spec.seed === spec.seed)
+          throw new Error("M8 requires a completed M7 source and a different terrain seed");
+        const checkpoint = JSON.parse(await readFile(resolve(config.artifactDir, source.id, "checkpoint.json"), "utf8"));
+        if (checkpoint.kind !== "neat-rl" || checkpoint.generation < 1)
+          throw new Error("M8 requires an evolved M7 champion");
+      }
       const catalog = await worlds.catalog();
       const profile = catalog.profiles.find((profile) => profile.id === catalog.active?.profileId);
-      if (spec.mode !== "minecraft" || spec.component !== "pipeline" || !spec.motor ||
+      if (spec.mode !== "minecraft" ||
+        spec.component !== (spec.motor === "M8" ? "evaluation" : "pipeline") ||
+        (spec.motor === "M8" && !spec.motorSource) || !spec.motor ||
         profile?.name !== "MLCraft Motor Superflat" || (await worlds.context())?.settings.type !== "flat" ||
         JSON.stringify(spec.arena) !== JSON.stringify(motorArena(spec.motor, spec.seed)))
         throw new Error("Motor sessions require the dedicated superflat world and their isolated stage arena");
@@ -280,6 +363,9 @@ export function createApp(
       throw new Error(
         "Select this run's recorded world generation before rerunning it",
       );
+    if (spec.motorResume &&
+        store.getRun(spec.motorResume)?.world?.generationId !== world?.generationId)
+      throw new Error("Select the checkpoint run's recorded world generation before continuing training");
     if (spec.mode === "minecraft") arenaConflict(spec, store.runs(1000));
     validateRulesCompatibility(spec, store.runs(1000));
     return scheduler.enqueue(spec, world, backend);
@@ -703,11 +789,29 @@ export function createApp(
     return motorWorldPreparation;
   }
   app.post("/phase3a/world", async () => { await prepareMotorWorld(); return motorWorldState(); });
+  function motorSessionSpec(
+    settings: Pick<MotorFullRunStage, "session" | "agents" | "episodes" | "ticksPerEpisode" | "tickMs" | "seed" | "backend">,
+    sourceRunId?: string,
+    fullRun?: { id: string; stage: number },
+  ) {
+    return runSchema.parse({
+      stage: "motor", motor: settings.session, mode: "minecraft",
+      component: settings.session === "M8" ? "evaluation" : "pipeline",
+      ...(sourceRunId ? { motorSource: sourceRunId } : {}),
+      ...(fullRun ? { motorFullRunId: fullRun.id, motorFullRunStage: fullRun.stage } : {}),
+      agents: settings.agents, episodes: settings.episodes,
+      ticksPerEpisode: settings.ticksPerEpisode, tickMs: settings.tickMs,
+      seed: settings.seed, backend: settings.backend,
+      arena: motorArena(settings.session, settings.seed),
+      rules: { ...DEFAULT_TRAINING_RULES, noHungerLoss: true, pvp: false, fallDamage: false, drowningDamage: false,
+        difficulty: "peaceful", world: { doMobSpawning: false, doDaylightCycle: false, doWeatherCycle: false } },
+    });
+  }
   app.post("/phase3a/sessions", async (req, reply) => {
     const { session, agents, episodes, ticksPerEpisode, tickMs, seed, backend } = z.object({
       session: z.enum(["M0", "M1", "M2", "M3", "M4", "M5", "M6", "M7", "M8"]),
-      agents: z.number().int().min(1).max(config.MAX_AGENTS).default(4),
-      episodes: z.number().int().min(1).max(100000).default(24),
+      agents: z.number().int().min(1).max(config.MAX_AGENTS).default(Math.min(32, config.MAX_AGENTS)),
+      episodes: z.number().int().min(1).max(100000).default(64),
       ticksPerEpisode: z.number().int().min(1).max(100000).default(80),
       tickMs: z.number().int().min(20).max(5000).default(100),
       seed: z.number().int().min(0).max(2147483647).default(42),
@@ -719,21 +823,213 @@ export function createApp(
     const source = previous >= 0 ? store.runs(1000).find((run) => run.status === "completed" && run.spec.stage === "motor" && run.spec.motor === `M${previous}`) : undefined;
     if (session === "M8" && !source)
       throw new Error("Complete an M7 run before testing generalisation on M8");
-    if (session === "M8" && source) {
-      if (seed === source.spec.seed) throw new Error("Choose a terrain seed different from the completed M7 run");
-      const checkpoint = JSON.parse(await readFile(resolve(config.artifactDir, source.id, "checkpoint.json"), "utf8"));
-      if (checkpoint.kind !== "neat-rl" || checkpoint.generation < 1)
-        throw new Error("M8 requires an M7 run that evolved at least one NEAT generation");
-    }
-    const spec = runSchema.parse({
-      stage: "motor", motor: session, mode: "minecraft", component: "pipeline",
-      ...(source ? { motorSource: source.id } : {}),
-      agents, episodes, ticksPerEpisode, tickMs, seed, backend,
-      arena: motorArena(session, seed),
-      rules: { ...DEFAULT_TRAINING_RULES, noHungerLoss: true, pvp: false, fallDamage: false, drowningDamage: false,
-        difficulty: "peaceful", world: { doMobSpawning: false, doDaylightCycle: false, doWeatherCycle: false } },
-    });
+    const spec = motorSessionSpec({ session, agents, episodes, ticksPerEpisode, tickMs, seed, backend }, source?.id);
     return reply.code(201).send(await enqueue(spec));
+  });
+  app.post("/phase3a/resume", async (req, reply) => {
+    const { runId, additionalEpisodes } = z.object({
+      runId: z.uuid(),
+      additionalEpisodes: z.number().int().min(1).max(100000),
+    }).strict().parse(req.body);
+    const source = store.getRun(runId);
+    if (!source || source.spec.stage !== "motor" || source.spec.component !== "pipeline")
+      throw new Error("Select a previous M0-M7 training run");
+    const checkpoint = JSON.parse(await readFile(resolve(config.artifactDir, runId, "checkpoint.json"), "utf8"));
+    const completedEpisodes = checkpoint.resumeState
+      ? checkpoint.episode
+      : checkpoint.generation * motorTrialPlan(1, source.spec.agents).episodesPerEvolution;
+    if (!Number.isSafeInteger(completedEpisodes) || completedEpisodes < 0 ||
+        completedEpisodes + additionalEpisodes > 100000)
+      throw new Error("Checkpoint cannot continue for the requested number of episodes");
+    const spec = runSchema.parse({
+      ...source.spec,
+      motorSource: undefined,
+      motorResume: runId,
+      episodes: completedEpisodes + additionalEpisodes,
+      startPaused: false,
+    });
+    return reply.code(201).send(await enqueue(spec, source.world?.generationId, source.backend?.revision));
+  });
+  function saveFullRun(plan: MotorFullRun) {
+    plan.updatedAt = new Date().toISOString();
+    store.saveMotorFullRun(plan);
+  }
+  async function fullRunOutcome(run: Run, stage: MotorFullRunStage) {
+    const priorCompleted = stage.runIds.slice(0, -1)
+      .findLastIndex((id) => store.getRun(id)?.status === "completed");
+    const segments = [] as Array<Array<{ episode: number; trials: number; successes: number }>>;
+    for (const id of stage.runIds.slice(priorCompleted + 1)) {
+      const body = await readFile(resolve(config.artifactDir, id, "motor-trials.jsonl"), "utf8");
+      segments.push(body.split("\n").filter(Boolean).map((line) => JSON.parse(line)));
+    }
+    const { episodeCount, successRate } = summarizeMotorTrials(segments, stage.episodes);
+    const checkpoint = JSON.parse(await readFile(resolve(config.artifactDir, run.id, "checkpoint.json"), "utf8"));
+    const bestFitness = Number(checkpoint.bestFitness);
+    if (!Number.isFinite(bestFitness) || episodeCount !== stage.episodes)
+      throw new Error(`Stage ${stage.session} has no usable trial or fitness results`);
+    return { successRate, bestFitness };
+  }
+  async function fullRunContinuation(run: Run, stage: MotorFullRunStage, interrupted: boolean) {
+    if (stage.session === "M8") return undefined;
+    try {
+      const checkpoint = JSON.parse(await readFile(resolve(config.artifactDir, run.id, "checkpoint.json"), "utf8"));
+      const completed = checkpoint.resumeState
+        ? checkpoint.episode
+        : checkpoint.generation * motorTrialPlan(1, stage.agents).episodesPerEvolution;
+      if (!Number.isSafeInteger(completed) || completed < 0)
+        throw new Error("Checkpoint has no recoverable episode");
+      const target = interrupted
+        ? Math.max(run.spec.episodes, completed + 1)
+        : completed + stage.episodes;
+      if (target > 100000) throw new Error("Full Run exceeds the 100,000 episode limit");
+      return runSchema.parse({
+        ...run.spec, motorSource: undefined, motorResume: run.id,
+        episodes: target, startPaused: false,
+      });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      return undefined;
+    }
+  }
+  let fullRunTicking = false;
+  let fullRunClosing = false;
+  async function advanceFullRuns() {
+    if (fullRunTicking || fullRunClosing) return;
+    fullRunTicking = true;
+    try {
+      for (const plan of store.motorFullRuns(1000).filter((entry) => entry.status === "running")) {
+        try {
+          if (plan.stageIndex >= plan.stages.length) {
+            plan.status = "completed";
+            saveFullRun(plan);
+            continue;
+          }
+          const stage = plan.stages[plan.stageIndex];
+          const orphan = store.runs(1000).find((run) =>
+            run.spec.motorFullRunId === plan.id &&
+            run.spec.motorFullRunStage === plan.stageIndex &&
+            !stage.runIds.includes(run.id));
+          if (orphan) {
+            stage.runIds.push(orphan.id);
+            saveFullRun(plan);
+          }
+          const last = stage.runIds.length
+            ? store.getRun(stage.runIds.at(-1)!) : undefined;
+          if (stage.runIds.length && !last)
+            throw new Error(`Full Run stage ${stage.session} lost its recorded run`);
+          if (last && ["queued", "running", "paused", "pausing"].includes(last.status)) continue;
+          if (scheduler.hasMinecraftWorkers()) continue;
+          if (last?.status === "completed") {
+            plan.retryRequested = false;
+            const outcome = await fullRunOutcome(last, stage);
+            stage.lastSuccessRate = outcome.successRate;
+            stage.lastBestFitness = outcome.bestFitness;
+            saveFullRun(plan);
+            if (outcome.successRate >= stage.minSuccessRate &&
+                (stage.minBestFitness === undefined || outcome.bestFitness >= stage.minBestFitness)) {
+              plan.stageIndex++;
+              if (plan.stageIndex === plan.stages.length) plan.status = "completed";
+              saveFullRun(plan);
+              continue;
+            }
+            const completedAttempts = stage.runIds.filter((id) => store.getRun(id)?.status === "completed").length;
+            if (completedAttempts >= stage.maxAttempts) {
+              plan.status = "failed";
+              plan.error = `${stage.session} did not meet its conditions after ${completedAttempts} attempt${completedAttempts === 1 ? "" : "s"}: success ${(outcome.successRate * 100).toFixed(1)}%, best fitness ${outcome.bestFitness.toFixed(2)}`;
+              saveFullRun(plan);
+              continue;
+            }
+          } else if (last && last.status !== "interrupted" && last.status !== "failed" && last.status !== "cancelled") {
+            throw new Error(`Unexpected run state ${last.status}`);
+          } else if (last?.status === "failed" || last?.status === "cancelled") {
+            if (!plan.retryRequested) {
+              plan.status = "paused";
+              plan.error = `${stage.session} run ${last.id.slice(0, 8)} ${last.status}. Resume the Full Run to retry this stage.`;
+              saveFullRun(plan);
+              continue;
+            }
+            plan.retryRequested = false;
+            saveFullRun(plan);
+          }
+          const previous = plan.stageIndex
+            ? plan.stages[plan.stageIndex - 1].runIds.at(-1) : undefined;
+          if (plan.stageIndex && (!previous || store.getRun(previous)?.status !== "completed"))
+            throw new Error(`Previous stage checkpoint for ${stage.session} is unavailable`);
+          await prepareMotorWorld();
+          if (fullRunClosing) return;
+          const spec = last
+            ? (await fullRunContinuation(last, stage, last.status !== "completed"))
+              ?? motorSessionSpec(stage, previous, { id: plan.id, stage: plan.stageIndex })
+            : motorSessionSpec(stage, previous, { id: plan.id, stage: plan.stageIndex });
+          const run = await enqueue(spec);
+          stage.runIds.push(run.id);
+          plan.error = undefined;
+          saveFullRun(plan);
+        } catch (error) {
+          plan.status = "paused";
+          plan.error = (error as Error).message;
+          saveFullRun(plan);
+        }
+      }
+    } finally {
+      fullRunTicking = false;
+    }
+  }
+  app.get("/phase3a/full-runs", async () => store.motorFullRuns());
+  app.post("/phase3a/full-runs", async (req, reply) => {
+    const { stages: configured } = fullRunRequestSchema.parse(req.body);
+    if (store.motorFullRuns(1000).some((plan) => ["running", "paused"].includes(plan.status)))
+      throw new Error("Finish or stop the existing Phase 3A Full Run first");
+    if (store.runs(1000).some((run) => run.spec.mode === "minecraft" &&
+        ["queued", "running", "paused", "pausing"].includes(run.status)))
+      throw new Error("Finish or cancel active Minecraft runs before starting a Full Run");
+    configured.forEach((stage) => {
+      validateArenaRun(motorSessionSpec(stage));
+      if (stage.backend === "fabric" && stage.agents > config.MAX_RENDER_CLIENTS)
+        throw new Error(`${stage.session} exceeds the rendered-client limit ${config.MAX_RENDER_CLIENTS}`);
+    });
+    const now = new Date().toISOString();
+    const plan: MotorFullRun = {
+      id: randomUUID(), status: "running", stageIndex: 0,
+      stages: configured.map((stage) => ({ ...stage, runIds: [] })),
+      createdAt: now, updatedAt: now,
+    };
+    store.saveMotorFullRun(plan);
+    void advanceFullRuns();
+    return reply.code(201).send(plan);
+  });
+  app.post("/phase3a/full-runs/:id/:action", async (req) => {
+    const { id, action } = z.object({
+      id: z.uuid(), action: z.enum(["pause", "resume", "cancel"]),
+    }).parse(req.params);
+    const plan = store.motorFullRun(id);
+    if (!plan) throw new Error("Full Run not found");
+    if (action === "pause" && plan.status === "running") {
+      plan.status = "paused";
+      plan.error = undefined;
+    } else if (action === "resume" && plan.status === "paused") {
+      plan.status = "running";
+      plan.error = undefined;
+      const stage = plan.stages[plan.stageIndex];
+      const last = stage?.runIds.length ? store.getRun(stage.runIds.at(-1)!) : undefined;
+      plan.retryRequested = last?.status === "failed" || last?.status === "cancelled";
+    } else if (action === "cancel" && ["running", "paused"].includes(plan.status)) {
+      plan.status = "cancelled";
+      saveFullRun(plan);
+      const stage = plan.stages[plan.stageIndex];
+      const run = stage?.runIds.length ? store.getRun(stage.runIds.at(-1)!) : undefined;
+      if (run && ["queued", "running", "paused", "pausing"].includes(run.status)) {
+        try {
+          scheduler.action(run.id, "cancel");
+        } catch (error) {
+          if (store.getRun(run.id)?.status !== "completed") throw error;
+        }
+      }
+      return plan;
+    } else throw new Error(`Cannot ${action} a ${plan.status} Full Run`);
+    saveFullRun(plan);
+    if (action === "resume") void advanceFullRuns();
+    return plan;
   });
   app.post("/runs/:id/playback", async (req) => {
     const { id } = z.object({ id: z.uuid() }).parse(req.params);
@@ -786,6 +1082,8 @@ export function createApp(
           "config.json",
           "metrics.jsonl",
           "episodes.jsonl",
+          "evolution.jsonl",
+          "motor-trials.jsonl",
           "checkpoint.json",
           "models.json",
           "inputs.jsonl",
@@ -894,8 +1192,11 @@ export function createApp(
     lag.reset();
   }, 2000);
   const hud = setInterval(() => server.syncViewerHud(), 1000);
+  const fullRunTimer = setInterval(() => void advanceFullRuns(), 2000);
   const prune = setInterval(() => store.prune(), 60000);
   app.addHook("onClose", async () => {
+    fullRunClosing = true;
+    clearInterval(fullRunTimer);
     clearInterval(hud);
     clearInterval(sample);
     clearInterval(prune);
@@ -913,6 +1214,7 @@ export function createApp(
   app.addHook("onReady", async () => {
     archive.start();
     scheduler.pump();
+    void advanceFullRuns();
   });
   return { app, store, scheduler, server, worlds };
 }

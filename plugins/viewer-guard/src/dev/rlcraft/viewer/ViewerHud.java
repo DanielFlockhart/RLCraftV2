@@ -5,6 +5,8 @@ import java.util.*;
 import java.util.function.Predicate;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
+import org.bukkit.Color;
+import org.bukkit.Particle;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.ConsoleCommandSender;
 import org.bukkit.configuration.file.YamlConfiguration;
@@ -25,6 +27,8 @@ final class ViewerHud implements Listener {
     private final Map<UUID, String> selections = new HashMap<>();
     private List<Map<?, ?>> runs = List.of();
     private long receivedAt;
+    private static final Particle.DustOptions TARGET_DUST = new Particle.DustOptions(Color.fromRGB(80, 255, 125), 1.5f);
+    private static final Particle.DustOptions SPAWN_DUST = new Particle.DustOptions(Color.fromRGB(75, 175, 255), 1.1f);
 
     private static final class Display {
         final Scoreboard previous, board;
@@ -56,6 +60,7 @@ final class ViewerHud implements Listener {
         this.plugin = plugin; this.viewer = viewer;
         Bukkit.getPluginManager().registerEvents(this, plugin);
         Bukkit.getScheduler().runTaskTimer(plugin, this::refresh, 20L, 20L);
+        Bukkit.getScheduler().runTaskTimer(plugin, this::refreshMarkers, 10L, 10L);
     }
 
     boolean sync(CommandSender sender, String[] args) {
@@ -73,6 +78,23 @@ final class ViewerHud implements Listener {
                     Object value = row.get(key);
                     if (!(value instanceof Number) || !Double.isFinite(((Number) value).doubleValue()))
                         throw new IllegalArgumentException("Invalid HUD number");
+                }
+                Object markers = row.get("motorMarkers");
+                if (markers == null) markers = List.of(); // Accept the previous control payload until it restarts.
+                if (!(markers instanceof List) || ((List<?>) markers).size() > 64) throw new IllegalArgumentException("Invalid motor markers");
+                for (Object marker : (List<?>) markers) {
+                    if (!(marker instanceof Map)) throw new IllegalArgumentException("Invalid motor marker");
+                    Map<?, ?> entry = (Map<?, ?>) marker;
+                    if (!(entry.get("index") instanceof Number)) throw new IllegalArgumentException("Invalid marker index");
+                    for (String key : List.of("spawn", "target")) {
+                        if (!(entry.get(key) instanceof Map)) throw new IllegalArgumentException("Invalid marker point");
+                        Map<?, ?> point = (Map<?, ?>) entry.get(key);
+                        for (String axis : List.of("x", "y", "z")) {
+                            Object value = point.get(axis);
+                            if (!(value instanceof Number) || !Double.isFinite(((Number) value).doubleValue()) || Math.abs(((Number) value).doubleValue()) > 30000000)
+                                throw new IllegalArgumentException("Invalid marker coordinate");
+                        }
+                    }
                 }
             }
             runs = List.copyOf(next); receivedAt = System.currentTimeMillis();
@@ -147,26 +169,57 @@ final class ViewerHud implements Listener {
             double tickProgress = number(run, "ticks") > 0 ? number(run, "tick") / number(run, "ticks") : 0;
             boolean timed = run.get("generationSeconds") instanceof Number && number(run, "generationSeconds") > 0;
             if (timed && run.get("trainingMs") instanceof Number) tickProgress = number(run, "trainingMs") / (number(run, "generationSeconds") * 1000);
-            display.line(1, ChatColor.YELLOW + stage);
+            String motor = run.get("motor") == null ? "" : string(run, "motor");
+            display.line(1, ChatColor.YELLOW + (motor.isEmpty() ? stage : stage + " " + motor));
             display.line(2, "Experiment: " + string(run, "id").substring(0, 8));
             display.line(3, "Status: " + status + " / " + string(run, "phase"));
-            display.line(4, "Generation: " + generation + "/" + (long) number(run, "episodes"));
+            display.line(4, (motor.isEmpty() ? "Generation: " : "Trial: ") + generation + "/" + (long) number(run, "episodes"));
             display.line(5, "Steps: " + (long) number(run, "tick") + "/" + (long) number(run, "ticks"));
             boolean timing = Boolean.TRUE.equals(run.get("timingAvailable"));
-            display.line(6, "Gen elapsed: " + (timing ? duration(number(run, "generationMs")) : "--"));
-            display.line(7, (timed ? "Active limit: " : "Gen minimum: ") + duration(number(run, "targetGenerationMs")));
-            display.line(8, "Previous gen: " + (number(run, "lastGenerationMs") < 0 ? "--" : duration(number(run, "lastGenerationMs"))));
+            display.line(6, (motor.isEmpty() ? "Gen elapsed: " : "Trial elapsed: ") + (timing ? duration(number(run, "generationMs")) : "--"));
+            display.line(7, (timed ? "Active limit: " : motor.isEmpty() ? "Gen minimum: " : "Trial minimum: ") + duration(number(run, "targetGenerationMs")));
+            display.line(8, (motor.isEmpty() ? "Previous gen: " : "Previous trial: ") + (number(run, "lastGenerationMs") < 0 ? "--" : duration(number(run, "lastGenerationMs"))));
             display.line(9, "Total runtime: " + (timing ? duration(number(run, "totalMs")) : "--"));
             display.line(10, "Run progress: " + Math.round(number(run, "progress") * 100) + "%");
             display.line(11, "Agents: " + (long) number(run, "agents") + " / " + string(run, "component"));
             display.line(12, "World: " + string(run, "world"));
             if (run.get("speed") instanceof Number && run.get("effectiveSpeed") instanceof Number)
                 display.line(13, String.format(Locale.ROOT, "Pace: %.2fx / effective %.2fx", number(run, "speed"), number(run, "effectiveSpeed")));
-            display.line(14, "/rlcrafthud next | off");
-            display.bar.setTitle(stage + " | Gen " + generation + "/" + (long) number(run, "episodes") + " | " + (stale ? "control disconnected" : status));
+            display.line(14, motor.isEmpty() ? "/rlcrafthud next | off" : "Green target | Blue spawn");
+            display.bar.setTitle(stage + (motor.isEmpty() ? " | Gen " : " | Trial ") + generation + "/" + (long) number(run, "episodes") + " | " + (stale ? "control disconnected" : status));
             display.bar.setProgress(Math.max(0, Math.min(1, tickProgress)));
             display.bar.setColor(stale || status.equals("failed") ? BarColor.RED : status.equals("paused") || status.equals("pausing") ? BarColor.YELLOW : status.equals("completed") ? BarColor.GREEN : BarColor.BLUE);
         }
+    }
+
+    /** Packets are sent to protected viewers only. No blocks or entities are created. */
+    private void refreshMarkers() {
+        if (receivedAt == 0 || System.currentTimeMillis() - receivedAt > 5000) return;
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            if (!viewer.test(player) || hidden.contains(player.getUniqueId())) continue;
+            Map<?, ?> run = select(player);
+            if (run == null || !player.getWorld().getName().equals(string(run, "world"))) continue;
+            Object value = run.get("motorMarkers");
+            if (!(value instanceof List)) continue;
+            for (Object item : (List<?>) value) {
+                if (!(item instanceof Map)) continue;
+                Map<?, ?> marker = (Map<?, ?>) item;
+                drawMarker(player, (Map<?, ?>) marker.get("target"), TARGET_DUST, true);
+                drawMarker(player, (Map<?, ?>) marker.get("spawn"), SPAWN_DUST, false);
+            }
+        }
+    }
+
+    private void drawMarker(Player player, Map<?, ?> point, Particle.DustOptions dust, boolean beacon) {
+        double x = number(point, "x"), y = number(point, "y"), z = number(point, "z");
+        double dx = player.getLocation().getX() - x, dy = player.getLocation().getY() - y, dz = player.getLocation().getZ() - z;
+        if (dx * dx + dy * dy + dz * dz > 96 * 96) return;
+        for (int i = 0; i < 8; i++) {
+            double angle = i * Math.PI / 4;
+            player.spawnParticle(Particle.REDSTONE, x + Math.cos(angle) * 0.7, y + 0.2, z + Math.sin(angle) * 0.7, 1, 0, 0, 0, 0, dust);
+        }
+        if (beacon) for (int i = 0; i < 5; i++)
+            player.spawnParticle(Particle.REDSTONE, x, y + 0.4 + i * 0.45, z, 1, 0, 0, 0, 0, dust);
     }
 
     private static String string(Map<?, ?> row, String key) {

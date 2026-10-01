@@ -8,6 +8,7 @@ import {
   YAxis,
   Tooltip,
   ResponsiveContainer,
+  ReferenceLine,
 } from "recharts";
 export const format = (n: number, d = 1) =>
   Number.isFinite(n) ? n.toFixed(d) : "?";
@@ -24,11 +25,13 @@ export function Chart({
   field,
   color = "#72e0ac",
   label,
+  boundaries = [],
 }: {
   data: Array<Record<string, number>>;
   field: string;
   color?: string;
   label: string;
+  boundaries?: Array<{ x: number; label: string }>;
 }) {
   if (!data.length)
     return (
@@ -92,6 +95,15 @@ export function Chart({
             labelFormatter={(v) => new Date(Number(v)).toLocaleTimeString()}
             formatter={(v) => [format(Number(v)), label]}
           />
+          {boundaries.map((boundary) => (
+            <ReferenceLine
+              key={`${boundary.x}-${boundary.label}`}
+              x={boundary.x}
+              stroke="#aab8ad"
+              strokeDasharray="4 4"
+              label={{ value: boundary.label, fill: "#cbd8cf", fontSize: 10 }}
+            />
+          ))}
           <Area
             type="monotone"
             dataKey={field}

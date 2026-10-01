@@ -4,8 +4,25 @@ import type {
   MotorSession,
   Observation,
 } from "./index.js";
-import { arenaSpawn } from "./arenas.js";
-export { motorSessions } from "./motor-sessions.js";
+import { arenaSpawn } from "./arenas.ts";
+export { motorSessions } from "./motor-sessions.ts";
+
+export const MOTOR_TRIALS_PER_EVOLUTION = 3;
+export const MOTOR_TARGET_RADIUS = 1.5;
+export function motorTrialPlan(episode: number, agents: number) {
+  const population = Math.max(8, agents);
+  const batches = Math.ceil(population / agents);
+  const episodesPerEvolution = batches * MOTOR_TRIALS_PER_EVOLUTION;
+  const offset = (episode - 1) % episodesPerEvolution;
+  return {
+    population,
+    batches,
+    episodesPerEvolution,
+    evolution: Math.floor((episode - 1) / episodesPerEvolution),
+    scenario: Math.floor(offset / batches),
+    batch: offset % batches,
+  };
+}
 
 function random(seed: number) {
   let state = seed >>> 0;
@@ -66,7 +83,9 @@ export function motorArena(session: MotorSession, seed: number): ArenaSpec {
     layout: "individual",
     columns: 4,
     gap: 16,
-    resetEachEpisode: true,
+    // Motor policies only move/look; teleporting agents resets the trial without
+    // rebuilding every cell for each generation.
+    resetEachEpisode: false,
   };
 }
 
@@ -76,10 +95,12 @@ export function motorTarget(
   index: number,
   episode: number,
   seed: number,
+  agents = 1,
 ): ArenaPoint {
   const spawn = arenaSpawn(arena, index);
+  const trial = motorTrialPlan(episode, agents);
   if (session === "M1") {
-    const rng = random(seed + episode * 997 + index * 31);
+    const rng = random(seed + trial.scenario * 31);
     const angle = rng() * Math.PI * 2;
     return {
       x: spawn.x + Math.cos(angle) * 10,
@@ -87,11 +108,30 @@ export function motorTarget(
       z: spawn.z + Math.sin(angle) * 10,
     };
   }
+  const distanceVariation = [-2, 0, 2][
+    (trial.scenario + Math.floor(random(seed)() * 3)) % 3
+  ];
   return {
-    x: spawn.x + (session === "M0" ? 12 : session === "M3" ? 19 : 24),
+    x:
+      spawn.x +
+      (session === "M0" ? 12 : session === "M3" ? 19 : 24) +
+      distanceVariation,
     y: spawn.y,
     z: spawn.z,
   };
+}
+
+export function motorReachedTarget(
+  observation: Observation,
+  target: ArenaPoint,
+) {
+  return (
+    Math.hypot(
+      target.x - observation.position.x,
+      target.y - observation.position.y,
+      target.z - observation.position.z,
+    ) <= MOTOR_TARGET_RADIUS
+  );
 }
 
 export function motorDelta(observation: Observation, target: ArenaPoint) {
@@ -106,6 +146,7 @@ export function motorReward(
   before: Observation,
   after: Observation,
   target: ArenaPoint,
+  alreadyReached = false,
 ) {
   const distance = (observation: Observation) =>
     Math.hypot(
@@ -118,7 +159,12 @@ export function motorReward(
   return (
     (previous - current) * 2 -
     0.01 +
-    (previous > 1.5 && current <= 1.5 ? 8 : 0) -
+    (!alreadyReached &&
+    after.health > 0 &&
+    previous > MOTOR_TARGET_RADIUS &&
+    current <= MOTOR_TARGET_RADIUS
+      ? 8
+      : 0) -
     (after.health <= 0 ? 5 : 0)
   );
 }

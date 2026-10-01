@@ -19,10 +19,10 @@ async function proxy(
   const valid =
     goalRoute ||
     (req.method === "GET"
-      ? /^(datasets(?:\/[a-f0-9-]+\/(?:examples|artifacts\/(?:(?:train|validation|test|ood_test)\.(?:csv|jsonl)|metadata\.json)))?|snapshot|progress|backends|clients|worlds|phase3a\/world|inputs(?:\/catalog\.json)?|agent-presets|arena-presets|models|models\/stage\/(movement|wood_collection|block_collection|survival|pvp)|models\/run\/[a-f0-9-]+|runs\/[a-f0-9-]+(?:\/agents\/rl_[a-f0-9]{6}_\d{1,3}\/(inputs|feed)|\/artifacts\/(config\.json|metrics\.jsonl|episodes\.jsonl|checkpoint\.json|controls\.jsonl|models\.json|inputs\.jsonl))?)$/.test(
+      ? /^(datasets(?:\/[a-f0-9-]+\/(?:examples|artifacts\/(?:(?:train|validation|test|ood_test)\.(?:csv|jsonl)|metadata\.json)))?|snapshot|progress|backends|clients|worlds|phase3a\/(?:world|full-runs)|inputs(?:\/catalog\.json)?|agent-presets|arena-presets|models|models\/stage\/(movement|wood_collection|block_collection|survival|pvp)|models\/run\/[a-f0-9-]+|runs\/[a-f0-9-]+(?:\/agents\/rl_[a-f0-9]{6}_\d{1,3}\/(inputs|feed)|\/artifacts\/(config\.json|metrics\.jsonl|episodes\.jsonl|evolution\.jsonl|motor-trials\.jsonl|checkpoint\.json|controls\.jsonl|models\.json|inputs\.jsonl))?)$/.test(
           route,
         )
-      : /^(phase0\/preview|phase3a\/(?:world|sessions)|datasets|datasets\/[a-f0-9-]+\/(rerun|cancel)|archive\/sync|clients\/prepare|inputs\/prepare|runs|runs\/[a-f0-9-]+\/(pause|resume|cancel|rerun|playback|watch|agents\/rl_[a-f0-9]{6}_\d{1,3}\/capture)|(?:agent|arena)-presets|(?:agent|arena)-presets\/[a-f0-9-]+(?:\/delete)?|worlds|worlds\/[a-f0-9-]+\/(activate|reset)|server\/(start|stop|command|prepare))$/.test(
+      : /^(phase0\/preview|phase3a\/(?:world|sessions|resume|full-runs(?:\/[a-f0-9-]+\/(?:pause|resume|cancel))?)|datasets|datasets\/[a-f0-9-]+\/(rerun|cancel)|archive\/sync|clients\/prepare|inputs\/prepare|runs|runs\/[a-f0-9-]+\/(pause|resume|cancel|rerun|playback|watch|agents\/rl_[a-f0-9]{6}_\d{1,3}\/capture)|(?:agent|arena)-presets|(?:agent|arena)-presets\/[a-f0-9-]+(?:\/delete)?|worlds|worlds\/[a-f0-9-]+\/(activate|reset)|server\/(start|stop|command|prepare))$/.test(
           route,
         ));
   if (!valid)
