@@ -204,6 +204,7 @@ export class Scheduler {
         index: number,
       ) => Promise<void>;
       cancel: (runId: string) => void;
+      status?: (requestId: string, runId: string) => Promise<Array<{ alive: number; kills: number }>>;
     },
     private rules?: {
       apply: (
@@ -214,6 +215,8 @@ export class Scheduler {
       ) => Promise<void>;
       release: (runId: string) => void;
     },
+    private naturalSpawn?: (username: string, radius: number) => void,
+    private naturalTarget?: (requestId: string, username: string, target: import("@mlcraft/core").ArenaPoint) => Promise<import("@mlcraft/core").ArenaPoint>,
   ) {}
   capacity() {
     return {
@@ -426,7 +429,7 @@ export class Scheduler {
               result("Run has no managed training arena");
               break;
             }
-            const runArena = current.spec.arena;
+            const runArena = message.type === "arena-build" && message.arena ? message.arena : current.spec.arena;
             Promise.resolve()
               .then(() => {
                 if (message.type === "arena-build")
@@ -457,6 +460,17 @@ export class Scheduler {
                 () => result(),
                 (error) => result((error as Error).message),
               );
+            break;
+          }
+          case "arena-status": {
+            if (!this.arena?.status) {
+              if (child.connected) child.send({ type: "setup-result", requestId: message.requestId, error: "Combat arena status unavailable" }, () => {});
+              break;
+            }
+            this.arena.status(message.requestId, run.id).then(
+              (status) => { if (child.connected) child.send({ type: "setup-result", requestId: message.requestId, status }, () => {}); },
+              (error) => { if (child.connected) child.send({ type: "setup-result", requestId: message.requestId, error: (error as Error).message }, () => {}); },
+            );
             break;
           }
           case "agent-setup": {
@@ -495,6 +509,42 @@ export class Scheduler {
                 () => result(),
                 (error) => result((error as Error).message),
               );
+            break;
+          }
+          case "natural-spawn": {
+            const index = Number(message.username.slice(`rl_${run.id.slice(0, 6)}_`.length));
+            const result = (error?: string) => {
+              if (child.connected)
+                child.send({ type: "setup-result", requestId: message.requestId, error }, () => {});
+            };
+            try {
+              if (!current.spec.motorTerrain || !this.naturalSpawn ||
+                  !Number.isInteger(index) || index < 0 || index >= current.spec.agents ||
+                  message.username !== `rl_${run.id.slice(0, 6)}_${index}` ||
+                  !Number.isInteger(message.radius) || message.radius < 32 || message.radius > 2048)
+                throw new Error("Invalid natural terrain spawn request");
+              this.naturalSpawn(message.username, message.radius);
+              result();
+            } catch (error) {
+              result((error as Error).message);
+            }
+            break;
+          }
+          case "natural-target": {
+            const index = Number(message.username.slice(`rl_${run.id.slice(0, 6)}_`.length));
+            const valid = current.spec.motorTerrain && this.naturalTarget &&
+              Number.isInteger(index) && index >= 0 && index < current.spec.agents &&
+              message.username === `rl_${run.id.slice(0, 6)}_${index}` &&
+              Number.isFinite(message.target.x) && Number.isFinite(message.target.z) &&
+              Math.abs(message.target.x) < 29999984 && Math.abs(message.target.z) < 29999984;
+            if (!valid) {
+              if (child.connected) child.send({ type: "setup-result", requestId: message.requestId, error: "Invalid natural terrain target request" }, () => {});
+              break;
+            }
+            this.naturalTarget!(message.requestId, message.username, message.target).then(
+              (target) => { if (child.connected) child.send({ type: "setup-result", requestId: message.requestId, target }, () => {}); },
+              (error) => { if (child.connected) child.send({ type: "setup-result", requestId: message.requestId, error: (error as Error).message }, () => {}); },
+            );
             break;
           }
           case "game-progress": {

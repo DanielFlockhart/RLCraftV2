@@ -11,7 +11,7 @@ export interface BackendDescriptor {
   /** Exact versions, or ["*"] for version-independent simulators. */
   minecraftVersions: string[];
   inputSupport: Record<string, InputSupport>;
-  actions: ("controls" | "look" | "dig")[];
+  actions: ("controls" | "look" | "dig" | "attack" | "block" | "use")[];
   lifecycle: {
     reset: boolean;
     respawn: boolean;

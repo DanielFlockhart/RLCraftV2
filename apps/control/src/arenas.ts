@@ -1,5 +1,6 @@
 import { z } from "zod";
 import minecraftData from "minecraft-data";
+import { combatMobTypes } from "../../../packages/core/src/combat.js";
 import {
   ARENA_BLOCK_BUDGET,
   arenaBlockCount,
@@ -86,15 +87,7 @@ export const arenaBlueprintSchema = z
         z
           .object({
             position: point,
-            type: z.enum([
-              "cow",
-              "pig",
-              "sheep",
-              "chicken",
-              "zombie",
-              "skeleton",
-              "spider",
-            ]),
+            type: z.enum(combatMobTypes as [string, ...string[]]),
             count: z.number().int().min(1).max(8),
           })
           .strict(),

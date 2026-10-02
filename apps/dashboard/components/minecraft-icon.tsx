@@ -73,6 +73,7 @@ export const worldIcons: Record<WorldSettings["type"], MinecraftAsset> = {
 export const stageIcons: Record<StageId, MinecraftAsset> = {
   movement: "leather_boots",
   motor: "stick",
+  interaction: "iron_pickaxe",
   wood_collection: "iron_axe",
   block_collection: "iron_pickaxe",
   survival: "apple",

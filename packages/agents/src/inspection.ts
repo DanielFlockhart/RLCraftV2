@@ -251,24 +251,5 @@ export async function inspectModels(
   for (let i = 0; i < policies.length; i++)
     add("policy", inspected[i], policies[i].username);
   if (trainer) add("trainer", await inspectComponent(trainer));
-  if (Buffer.byteLength(JSON.stringify(variants)) > 1000000) {
-    return [
-      {
-        role: "policy",
-        agents: policies.map((member) => member.username),
-        fingerprint: "unavailable-size-limit",
-        inspection: {
-          implementation: "Multiple models",
-          framework: "unknown",
-          status: "unavailable",
-          reason:
-            "Combined model inspection exceeds 1 MiB. Reduce inspector detail; training continues.",
-          nodes: [],
-          edges: [],
-          hyperparameters: {},
-        },
-      },
-    ];
-  }
   return variants;
 }

@@ -41,7 +41,7 @@ export const motorSessions = [
   },
   {
     id: "M8",
-    name: "Generalisation to unseen terrain/seeds",
-    detail: "Evaluate on a fresh seeded terrain layout.",
+    name: "Seeded arena evaluation",
+    detail: "Evaluate the frozen M7 champion in a different seeded superflat arena.",
   },
 ] as const;

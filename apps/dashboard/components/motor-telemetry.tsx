@@ -403,6 +403,18 @@ export function MotorTelemetry({
     successRate: trial.successRate * 100,
     meanSuccessSteps: trial.meanSuccessSteps,
   }));
+  const rewardsByTrial = new Map<string, Metric>();
+  for (const metric of allMetrics)
+    if (metric.kind === "motor-trial")
+      rewardsByTrial.set(`${metric.runId}:${metric.episode}`, metric);
+  const completedTrialRewards = [...rewardsByTrial.values()].sort(
+    (a, b) => a.at - b.at || a.episode - b.episode,
+  );
+  const rewardHistory = completedTrialRewards.map((metric, index) => ({
+    point: index + 1,
+    episode: metric.episode,
+    reward: metric.reward,
+  }));
   const evolutionHistory = allEvolutions.map((entry, index) => ({
     point: index + 1,
     generation: entry.generation,
@@ -418,6 +430,12 @@ export function MotorTelemetry({
   });
   const trialBoundaries = continuedRuns.flatMap((run) => {
     const index = allTrials.findIndex((entry) => entry.runId === run.id);
+    return index >= 0 ? [{ x: index + 1, label: "Continued" }] : [];
+  });
+  const rewardBoundaries = continuedRuns.flatMap((run) => {
+    const index = completedTrialRewards.findIndex(
+      (metric) => metric.runId === run.id,
+    );
     return index >= 0 ? [{ x: index + 1, label: "Continued" }] : [];
   });
   const evolutionBoundaries = continuedRuns.flatMap((run) => {
@@ -533,12 +551,15 @@ export function MotorTelemetry({
           <div className="motor-telemetry-charts">
             <div>
               <h4>Population reward</h4>
-              <p>Mean cumulative reward during each trial episode</p>
-              <Chart
-                data={liveMetrics as unknown as Array<Record<string, number>>}
+              <p>Final mean reward for each completed trial episode</p>
+              <HistoryChart
+                data={rewardHistory}
+                xKey="point"
+                labelKey="episode"
                 field="reward"
                 label="Mean reward"
-                boundaries={metricBoundaries}
+                color="#72e0ac"
+                boundaries={rewardBoundaries}
               />
             </div>
             <div>

@@ -9,6 +9,7 @@ import type {
   ServerState,
   AgentSetup,
   ArenaSpec,
+  ArenaPoint,
   TrainingRules,
 } from "@mlcraft/core";
 import { config } from "./config.js";
@@ -28,6 +29,16 @@ export class MinecraftServer {
       timer: ReturnType<typeof setTimeout>;
     }
   >();
+  private surfaceRequests = new Map<string, {
+    resolve: (point: ArenaPoint) => void;
+    reject: (error: Error) => void;
+    timer: ReturnType<typeof setTimeout>;
+  }>();
+  private combatStatusRequests = new Map<string, {
+    resolve: (rows: Array<{ alive: number; kills: number }>) => void;
+    reject: (error: Error) => void;
+    timer: ReturnType<typeof setTimeout>;
+  }>();
   get hasProcess() {
     return !!this.child;
   }
@@ -125,6 +136,36 @@ export class MinecraftServer {
                   );
             }
           }
+          const combatStatus = line.match(/RLCRAFT_ARENA_STATUS_(OK|ERROR) ([a-f0-9-]{36})(?: (.*))?$/);
+          if (combatStatus) {
+            const request = this.combatStatusRequests.get(combatStatus[2]);
+            if (request) {
+              clearTimeout(request.timer);
+              this.combatStatusRequests.delete(combatStatus[2]);
+              if (combatStatus[1] === "ERROR") request.reject(new Error(combatStatus[3] || "Arena status unavailable"));
+              else {
+                const rows = (combatStatus[3] || "").split(";").map((row) => row.split(",").map(Number));
+                if (rows.length && rows.every((row) => row.length === 2 && row.every(Number.isSafeInteger)))
+                  request.resolve(rows.map(([alive, kills]) => ({ alive, kills })));
+                else request.reject(new Error("Invalid arena status response"));
+              }
+            }
+          }
+          const surfaceResult = line.match(/RLCRAFT_SURFACE_(OK|ERROR) ([a-f0-9-]{36})(?: (.*))?$/);
+          if (surfaceResult) {
+            const request = this.surfaceRequests.get(surfaceResult[2]);
+            if (request) {
+              clearTimeout(request.timer);
+              this.surfaceRequests.delete(surfaceResult[2]);
+              if (surfaceResult[1] === "ERROR") request.reject(new Error(surfaceResult[3] || "No standable terrain target"));
+              else {
+                const coords = surfaceResult[3]?.split(" ").map(Number);
+                if (coords?.length === 3 && coords.every(Number.isFinite))
+                  request.resolve({ x: coords[0], y: coords[1], z: coords[2] });
+                else request.reject(new Error("Invalid terrain target response"));
+              }
+            }
+          }
           if (line.includes("Unsupported Java detected")) {
             this.state = {
               ...this.state,
@@ -152,6 +193,8 @@ export class MinecraftServer {
         request.reject(error);
       }
       this.setupRequests.clear();
+      for (const request of this.surfaceRequests.values()) { clearTimeout(request.timer); request.reject(error); }
+      this.surfaceRequests.clear();
       this.log(`Minecraft console input failed: ${error.message}`, "warn");
     });
     child.on("error", (err) => {
@@ -164,6 +207,8 @@ export class MinecraftServer {
         request.reject(new Error("Minecraft exited during agent setup"));
       }
       this.setupRequests.clear();
+      for (const request of this.surfaceRequests.values()) { clearTimeout(request.timer); request.reject(new Error("Minecraft exited during terrain lookup")); }
+      this.surfaceRequests.clear();
       clearTimeout(this.startupTimer);
       const intentional = this.state.status === "stopping";
       const error = this.state.error;
@@ -189,6 +234,23 @@ export class MinecraftServer {
     this.child.stdin.write(command.trim() + "\n");
     this.log(`> ${command}`);
     return { accepted: true };
+  }
+  resolveNaturalTarget(requestId: string, username: string, target: ArenaPoint): Promise<ArenaPoint> {
+    if (this.state.status !== "running" || !this.state.hudReady || !this.child?.stdin?.writable)
+      throw new Error("Natural terrain lookup requires the updated managed server plugin");
+    if (!/^[a-f0-9-]{36}$/.test(requestId) || !/^rl_[a-f0-9]{6}_\d+$/.test(username) ||
+        !Number.isFinite(target.x) || !Number.isFinite(target.z) ||
+        Math.abs(target.x) >= 29999984 || Math.abs(target.z) >= 29999984 ||
+        this.surfaceRequests.has(requestId))
+      throw new Error("Invalid natural terrain target request");
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.surfaceRequests.delete(requestId);
+        reject(new Error("Natural terrain lookup timed out"));
+      }, 25000);
+      this.surfaceRequests.set(requestId, { resolve, reject, timer });
+      this.child!.stdin!.write(`rlcraftsurface ${requestId} ${username} ${Math.floor(target.x)} ${Math.floor(target.z)}\n`);
+    });
   }
   setupAgent(requestId: string, username: string, setup: AgentSetup) {
     if (
@@ -304,6 +366,20 @@ export class MinecraftServer {
       `rlcraftarenaspawn ${requestId} ${runId} ${username} ${index}`,
     );
   }
+  async combatArenaStatus(requestId: string, runId: string) {
+    if (this.state.status !== "running" || !this.state.arenaReady || !this.child?.stdin?.writable)
+      throw new Error("Combat arena status requires the updated managed server plugin");
+    if (!/^[a-f0-9-]{36}$/.test(requestId) || !/^[a-f0-9-]{36}$/.test(runId))
+      throw new Error("Invalid combat arena status request");
+    return new Promise<Array<{ alive: number; kills: number }>>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.combatStatusRequests.delete(requestId);
+        reject(new Error("Combat arena status timed out"));
+      }, 15000);
+      this.combatStatusRequests.set(requestId, { resolve, reject, timer });
+      this.child!.stdin!.write(`rlcraftarenastatus ${requestId} ${runId}\n`);
+    });
+  }
   cancelArena(runId: string) {
     if (
       /^[a-f0-9-]{36}$/.test(runId) &&
@@ -349,7 +425,8 @@ export class MinecraftServer {
     // Backpressure drops a frame; the next one replaces it entirely.
     if (this.child.stdin.writableLength > 65536) return;
     const payload = Buffer.from(
-      JSON.stringify({ runs: viewerHudRuns(this.store.runs(128)) }),
+      JSON.stringify({ runs: viewerHudRuns(this.store.runs(128), Date.now(),
+        (runId) => this.store.agents(runId)) }),
     ).toString("base64url");
     if (payload.length <= 32768)
       this.child.stdin.write(`rlcrafthudsync ${payload}\n`);

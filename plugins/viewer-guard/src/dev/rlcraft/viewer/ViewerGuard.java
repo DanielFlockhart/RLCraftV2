@@ -14,6 +14,8 @@ import org.bukkit.Location;
 import org.bukkit.GameMode;
 import org.bukkit.GameRule;
 import org.bukkit.World;
+import org.bukkit.HeightMap;
+import org.bukkit.block.Block;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.ConsoleCommandSender;
@@ -191,7 +193,9 @@ public final class ViewerGuard extends JavaPlugin implements Listener {
         if (command.getName().equalsIgnoreCase("rlcrafthud")) return hud.command(sender, args);
         if (command.getName().equalsIgnoreCase("rlcraftsetup")) return setupAgent(sender, args);
         if (command.getName().equalsIgnoreCase("rlcraftarena")) return arenas.command(sender, args);
+        if (command.getName().equalsIgnoreCase("rlcraftarenastatus")) return arenas.status(sender, args);
         if (command.getName().equalsIgnoreCase("rlcraftarenaspawn")) return arenas.spawn(sender, args);
+        if (command.getName().equalsIgnoreCase("rlcraftsurface")) return resolveSurface(sender, args);
         if (args.length != 1) return false;
         Player player = Bukkit.getPlayerExact(args[0]);
         if (player == null) { sender.sendMessage("Player is not online: " + args[0]); return true; }
@@ -202,6 +206,58 @@ public final class ViewerGuard extends JavaPlugin implements Listener {
             + " sleepingIgnored=" + player.isSleepingIgnored()
             + " spectatorChunks=" + player.getWorld().getGameRuleValue(GameRule.SPECTATORS_GENERATE_CHUNKS));
         return true;
+    }
+
+    private boolean resolveSurface(CommandSender sender, String[] args) {
+        if (!(sender instanceof ConsoleCommandSender)) { sender.sendMessage("Terrain lookup is console-only."); return true; }
+        if (args.length != 4 || !args[0].matches("[a-f0-9-]{36}")) return false;
+        String requestId = args[0];
+        try {
+            if (!args[1].matches("rl_[a-f0-9]{6}_[0-9]+")) throw new IllegalArgumentException("Not a training agent");
+            Player agent = Bukkit.getPlayerExact(args[1]);
+            if (agent == null || isViewer(agent)) throw new IllegalArgumentException("Training agent unavailable");
+            int x = Integer.parseInt(args[2]), z = Integer.parseInt(args[3]);
+            if (Math.abs((long) x) >= 29999984 || Math.abs((long) z) >= 29999984)
+                throw new IllegalArgumentException("Target outside world bounds");
+            World world = agent.getWorld();
+            world.getChunkAtAsync(x >> 4, z >> 4, true).whenComplete((chunk, error) ->
+                Bukkit.getScheduler().runTask(this, () -> {
+                    try {
+                        if (error != null || chunk == null || !agent.isOnline() || agent.getWorld() != world)
+                            throw new IllegalStateException("Target chunk unavailable");
+                        Location ground = standableTarget(world, x, z);
+                        if (ground == null) throw new IllegalStateException("No standable surface near target");
+                        getLogger().info(String.format(Locale.ROOT, "RLCRAFT_SURFACE_OK %s %.1f %.1f %.1f",
+                            requestId, ground.getX(), ground.getY(), ground.getZ()));
+                    } catch (Exception failure) { surfaceError(requestId, failure); }
+                })
+            );
+        } catch (Exception error) { surfaceError(requestId, error); }
+        return true;
+    }
+
+    private Location standableTarget(World world, int desiredX, int desiredZ) {
+        for (int radius = 0; radius <= 8; radius++) {
+            for (int dx = -radius; dx <= radius; dx++) for (int dz = -radius; dz <= radius; dz++) {
+                if (Math.max(Math.abs(dx), Math.abs(dz)) != radius) continue;
+                int x = desiredX + dx, z = desiredZ + dz;
+                int top = world.getHighestBlockYAt(x, z, HeightMap.MOTION_BLOCKING_NO_LEAVES);
+                for (int y = Math.min(top + 1, world.getMaxHeight() - 2); y >= Math.max(world.getMinHeight() + 1, top - 20); y--) {
+                    Block floor = world.getBlockAt(x, y - 1, z);
+                    Block feet = world.getBlockAt(x, y, z);
+                    Block head = world.getBlockAt(x, y + 1, z);
+                    if (floor.getType().isSolid() && feet.isPassable() && head.isPassable() &&
+                        !feet.isLiquid() && !head.isLiquid() && !floor.isLiquid())
+                        return new Location(world, x + 0.5, y, z + 0.5);
+                }
+            }
+        }
+        return null;
+    }
+
+    private void surfaceError(String requestId, Exception error) {
+        getLogger().warning("RLCRAFT_SURFACE_ERROR " + requestId + " " +
+            String.valueOf(error.getMessage()).replace('\n', ' ').replace('\r', ' '));
     }
 
     private boolean setupAgent(CommandSender sender, String[] args) {

@@ -13,6 +13,8 @@ import type {
   Metric,
   Run,
   MotorFullRun,
+  MotorTerrainRun,
+  CombatFullRun,
   AgentPreset,
   ArenaPreset,
 } from "@mlcraft/core";
@@ -24,6 +26,8 @@ export class Store {
     this.db.exec(`PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;
       CREATE TABLE IF NOT EXISTS runs(id TEXT PRIMARY KEY, status TEXT NOT NULL, body TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS motor_full_runs(id TEXT PRIMARY KEY, status TEXT NOT NULL, body TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS motor_terrain_runs(id TEXT PRIMARY KEY, status TEXT NOT NULL, body TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS combat_full_runs(id TEXT PRIMARY KEY, status TEXT NOT NULL, body TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS agents(id TEXT PRIMARY KEY, run_id TEXT NOT NULL, body TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS metrics(id INTEGER PRIMARY KEY, run_id TEXT NOT NULL, at INTEGER NOT NULL, body TEXT NOT NULL);
       CREATE INDEX IF NOT EXISTS metrics_run_at ON metrics(run_id,at);
@@ -57,6 +61,32 @@ export class Store {
   }
   motorFullRuns(limit = 20): MotorFullRun[] {
     return this.db.prepare("SELECT body FROM motor_full_runs ORDER BY rowid DESC LIMIT ?")
+      .all(limit).map((row) => JSON.parse(String(row.body)));
+  }
+  saveMotorTerrainRun(plan: MotorTerrainRun) {
+    this.db.prepare(
+      "INSERT INTO motor_terrain_runs VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET status=excluded.status,body=excluded.body",
+    ).run(plan.id, plan.status, JSON.stringify(plan));
+  }
+  motorTerrainRun(id: string): MotorTerrainRun | undefined {
+    const row = this.db.prepare("SELECT body FROM motor_terrain_runs WHERE id=?").get(id);
+    return row ? JSON.parse(String(row.body)) : undefined;
+  }
+  motorTerrainRuns(limit = 20): MotorTerrainRun[] {
+    return this.db.prepare("SELECT body FROM motor_terrain_runs ORDER BY rowid DESC LIMIT ?")
+      .all(limit).map((row) => JSON.parse(String(row.body)));
+  }
+  saveCombatFullRun(plan: CombatFullRun) {
+    this.db.prepare(
+      "INSERT INTO combat_full_runs VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET status=excluded.status,body=excluded.body",
+    ).run(plan.id, plan.status, JSON.stringify(plan));
+  }
+  combatFullRun(id: string): CombatFullRun | undefined {
+    const row = this.db.prepare("SELECT body FROM combat_full_runs WHERE id=?").get(id);
+    return row ? JSON.parse(String(row.body)) : undefined;
+  }
+  combatFullRuns(limit = 20): CombatFullRun[] {
+    return this.db.prepare("SELECT body FROM combat_full_runs ORDER BY rowid DESC LIMIT ?")
       .all(limit).map((row) => JSON.parse(String(row.body)));
   }
   saveProgress(record: ProgressRecord) {

@@ -9,10 +9,32 @@ import type {
   CaptureFrame,
 } from "@mlcraft/core";
 import { defaultInputs, inputCatalog } from "@mlcraft/core";
+import { combatMobTypes } from "../../../core/src/combat.js";
+import { chooseMiningTool, skillAffordance } from "../../../core/src/interaction.js";
+import type { SkillRequest, SkillResult } from "../../../core/src/interaction.js";
+import { Vec3 } from "vec3";
 import { MinecraftInputs } from "../inputs/minecraft.js";
 import { MinecraftProgress } from "../progression.js";
 import type { ProgressEvidence } from "@mlcraft/core";
 export class MinecraftEnvironment implements Environment {
+  private blocking = false;
+  private lastAttackAt = 0;
+  private lastAttackTarget?: number;
+  private lastRangedAttackAt = 0;
+  private lastRangedAttackTarget?: number;
+  private confirmedHits = 0;
+  private recentHurt = new Map<number, number>();
+  private usingItemSince = 0;
+  private static readonly combatMobs = new Set<string>(combatMobTypes);
+  private static readonly projectiles = new Set([
+    "arrow",
+    "spectral_arrow",
+    "small_fireball",
+    "fireball",
+    "potion",
+    "trident",
+    "llama_spit",
+  ]);
   private progression?: MinecraftProgress;
   private progressListener?: (evidence: ProgressEvidence) => void;
   watchProgress(listener: (evidence: ProgressEvidence) => void) {
@@ -39,6 +61,12 @@ export class MinecraftEnvironment implements Environment {
     private moveToArena?: () => Promise<void>,
     private inputs: AgentInputConfig = structuredClone(defaultInputs),
     private assetDirectory?: string,
+    private combatBounds?: {
+      minX: number;
+      maxX: number;
+      minZ: number;
+      maxZ: number;
+    },
   ) {}
   async connect() {
     const bot = mineflayer.createBot({
@@ -47,6 +75,16 @@ export class MinecraftEnvironment implements Environment {
       respawn: false,
     });
     this.bot = bot;
+    bot.on("entityHurt", (entity) => {
+      if (entity?.id !== undefined) this.recentHurt.set(entity.id, Date.now());
+      if (
+        (entity?.id === this.lastAttackTarget &&
+          Date.now() - this.lastAttackAt < 1200) ||
+        (entity?.id === this.lastRangedAttackTarget &&
+          Date.now() - this.lastRangedAttackAt < 3000)
+      )
+        this.confirmedHits++;
+    });
     this.sensors = new MinecraftInputs(bot, this.inputs, this.assetDirectory);
     if (this.progressListener && this.config.version === "1.18.1")
       this.progression = new MinecraftProgress(bot, (evidence) =>
@@ -109,12 +147,102 @@ export class MinecraftEnvironment implements Environment {
       .slice(5)
       .filter((item) => item !== null))
       inventory[item.name] = (inventory[item.name] ?? 0) + item.count;
+    const targets = Object.values(b.entities)
+      .filter(
+        (entity) =>
+          MinecraftEnvironment.combatMobs.has(entity.name ?? "") &&
+          entity.position.distanceTo(p) < 32 &&
+          (!this.combatBounds ||
+            (entity.position.x >= this.combatBounds.minX &&
+              entity.position.x <= this.combatBounds.maxX &&
+              entity.position.z >= this.combatBounds.minZ &&
+              entity.position.z <= this.combatBounds.maxZ)),
+      )
+      .sort((a, c) => a.position.distanceTo(p) - c.position.distanceTo(p))
+      .map((entity) => ({
+        id: entity.id,
+        type: entity.name!,
+        position: {
+          x: entity.position.x,
+          y: entity.position.y,
+          z: entity.position.z,
+        },
+        velocity: {
+          x: entity.velocity.x,
+          y: entity.velocity.y,
+          z: entity.velocity.z,
+        },
+        onFire: (Number(entity.metadata?.[0] ?? 0) & 1) !== 0,
+        recentlyHurt: Date.now() - (this.recentHurt.get(entity.id) ?? 0) < 700,
+        ...(entity.name === "creeper"
+          ? {
+              creeperFuse: Number(entity.metadata?.[16] ?? 0),
+              creeperCharged: Boolean(entity.metadata?.[17]),
+              creeperIgnited: Boolean(entity.metadata?.[18]),
+            }
+          : {}),
+        ...(typeof (entity as unknown as { health?: number }).health ===
+        "number"
+          ? { health: (entity as unknown as { health: number }).health }
+          : {}),
+      }));
+    const projectiles = Object.values(b.entities)
+      .filter(
+        (entity) =>
+          MinecraftEnvironment.projectiles.has(entity.name ?? "") &&
+          entity.position.distanceTo(p) < 24 &&
+          (!this.combatBounds ||
+            (entity.position.x >= this.combatBounds.minX &&
+              entity.position.x <= this.combatBounds.maxX &&
+              entity.position.z >= this.combatBounds.minZ &&
+              entity.position.z <= this.combatBounds.maxZ)),
+      )
+      .sort((a, c) => a.position.distanceTo(p) - c.position.distanceTo(p))
+      .slice(0, 4)
+      .map((entity) => ({
+        position: {
+          x: entity.position.x,
+          y: entity.position.y,
+          z: entity.position.z,
+        },
+        velocity: {
+          x: entity.velocity.x,
+          y: entity.velocity.y,
+          z: entity.velocity.z,
+        },
+      }));
+    const effects = Object.values(b.entity.effects ?? {}) as Array<{
+      id?: number;
+    }>;
+    const crossbowNbt = b.heldItem?.nbt as
+      { value?: { Charged?: { value?: number | boolean } } } | undefined;
     return {
       position: { x: p.x, y: p.y, z: p.z },
       health: b.health,
       food: b.food,
       inventory,
       tick,
+      combat: {
+        targets,
+        projectiles,
+        confirmedHits: this.confirmedHits,
+        shieldRaised: this.blocking,
+        selfOnFire: (Number(b.entity.metadata?.[0] ?? 0) & 1) !== 0,
+        poisoned: effects.some((effect) => effect.id === 19),
+        slowed: effects.some((effect) => effect.id === 2),
+        withered: effects.some((effect) => effect.id === 20),
+        itemUseTicks: this.usingItemSince
+          ? (Date.now() - this.usingItemSince) / 50
+          : 0,
+        weaponLoaded:
+          crossbowNbt?.value?.Charged?.value === 1 ||
+          crossbowNbt?.value?.Charged?.value === true,
+        attackReady: Math.min(
+          1,
+          (Date.now() - this.lastAttackAt) /
+            (b.heldItem?.name.endsWith("_axe") ? 1100 : 650),
+        ),
+      },
       inputs: this.sensors!.observe(tick),
     };
   }
@@ -125,12 +253,165 @@ export class MinecraftEnvironment implements Environment {
     for (const [control, value] of Object.entries(action.controls ?? {}))
       b.setControlState(control as mineflayer.ControlState, Boolean(value));
     if (action.look) await b.look(action.look.yaw, action.look.pitch, true);
+    const trackRangedShot = () => {
+      const aimed = b.entityAtCursor(32);
+      if (
+        aimed &&
+        MinecraftEnvironment.combatMobs.has(aimed.name ?? "") &&
+        (!this.combatBounds ||
+          (aimed.position.x >= this.combatBounds.minX &&
+            aimed.position.x <= this.combatBounds.maxX &&
+            aimed.position.z >= this.combatBounds.minZ &&
+            aimed.position.z <= this.combatBounds.maxZ))
+      ) {
+        this.lastRangedAttackTarget = aimed.id;
+        this.lastRangedAttackAt = Date.now();
+      }
+    };
+    if (
+      action.block &&
+      !this.blocking &&
+      b.inventory.slots[45]?.name === "shield"
+    ) {
+      b.activateItem(true);
+      this.blocking = true;
+    } else if (
+      (!action.block || b.inventory.slots[45]?.name !== "shield") &&
+      this.blocking
+    ) {
+      b.deactivateItem();
+      this.blocking = false;
+    }
+    if (
+      action.use &&
+      !this.usingItemSince &&
+      ["bow", "crossbow", "trident"].includes(b.heldItem?.name ?? "")
+    ) {
+      if (b.heldItem?.name === "crossbow") trackRangedShot();
+      b.activateItem();
+      this.usingItemSince = Date.now();
+    } else if (
+      (!action.use ||
+        !["bow", "crossbow", "trident"].includes(b.heldItem?.name ?? "")) &&
+      this.usingItemSince
+    ) {
+      trackRangedShot();
+      b.deactivateItem();
+      this.usingItemSince = 0;
+    }
+    if (action.attack) {
+      const entity = b.entityAtCursor(3.2);
+      if (
+        entity &&
+        Date.now() - this.lastAttackAt >=
+          (b.heldItem?.name.endsWith("_axe") ? 1100 : 650) &&
+        MinecraftEnvironment.combatMobs.has(entity.name ?? "") &&
+        (!this.combatBounds ||
+          (entity.position.x >= this.combatBounds.minX &&
+            entity.position.x <= this.combatBounds.maxX &&
+            entity.position.z >= this.combatBounds.minZ &&
+            entity.position.z <= this.combatBounds.maxZ))
+      ) {
+        b.attack(entity);
+        this.lastAttackAt = Date.now();
+        this.lastAttackTarget = entity.id;
+      }
+    }
     if (action.dig) {
       const block = b.blockAtCursor(4);
       if (block && b.canDigBlock(block)) await b.dig(block);
     }
   }
+  async executeSkill(request: SkillRequest): Promise<SkillResult> {
+    if (this.failure) throw this.failure;
+    const started = Date.now();
+    const bot = this.bot!;
+    let actions = 0;
+    let toolCorrect: boolean | undefined;
+    const inventory = () => Object.fromEntries(
+      bot.inventory.items().map((item) => [
+        item.name,
+        bot.inventory.items().filter((entry) => entry.name === item.name)
+          .reduce((count, entry) => count + entry.count, 0),
+      ]),
+    );
+    const before = inventory();
+    const result = (
+      status: SkillResult["status"],
+      reason?: SkillResult["reason"],
+      targetRemoved?: boolean,
+      missing?: SkillResult["missing"],
+    ): SkillResult => {
+      const after = inventory();
+      const delta = Object.fromEntries(
+        [...new Set([...Object.keys(before), ...Object.keys(after)])]
+          .map((item) => [item, (after[item] ?? 0) - (before[item] ?? 0)])
+          .filter(([, count]) => count !== 0),
+      ) as Record<string, number>;
+      return {
+        status,
+        ...(reason ? { reason } : {}),
+        state_delta: { inventory: delta, ...(targetRemoved !== undefined ? { targetRemoved } : {}) },
+        duration_ms: Date.now() - started,
+        metrics: { actions, ...(toolCorrect !== undefined ? { toolCorrect } : {}) },
+        ...(missing ? { missing } : {}),
+      };
+    };
+    const target = request.target.position;
+    if (!target || !request.target.block || !["AIM", "MINE"].includes(request.skill))
+      return result("FAILURE", "INTERACTION_FAILED");
+    const position = new Vec3(target.x, target.y, target.z);
+    const expected = request.target.block.replace(/^minecraft:/, "");
+    const readyDeadline = Date.now() + 5000;
+    let block = bot.blockAt(position);
+    while (block?.name !== expected && Date.now() < readyDeadline) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      block = bot.blockAt(position);
+    }
+    const distance = bot.entity.position.offset(0, 1.62, 0)
+      .distanceTo(position.offset(0.5, 0.5, 0.5));
+    const affordance = skillAffordance(request, {
+      inventory: before,
+      distance,
+      targetExists: block?.name === expected,
+    });
+    if (!affordance.executable)
+      return result("FAILURE", affordance.reason, undefined, affordance.missing);
+    try {
+      if (request.parameters?.startYaw !== undefined) {
+        await bot.look(request.parameters.startYaw, request.parameters.startPitch ?? 0, true);
+        actions++;
+      }
+      await bot.lookAt(position.offset(0.5, 0.5, 0.5), true);
+      actions++;
+      if (!bot.blockAtCursor(4.5)?.position.equals(position))
+        return result("FAILURE", "TARGET_UNREACHABLE");
+      if (request.skill === "AIM") return result("SUCCESS");
+      const tool = chooseMiningTool(expected, before);
+      if (tool) {
+        const item = bot.inventory.items().find((entry) => entry.name === tool);
+        if (!item) return result("FAILURE", "MISSING_TOOL");
+        await bot.equip(item, "hand");
+        actions++;
+        toolCorrect = true;
+      }
+      if (!bot.canDigBlock(block!)) return result("FAILURE", "TARGET_UNREACHABLE");
+      await bot.dig(block!, true);
+      actions++;
+      const deadline = Date.now() + 1500;
+      while (Date.now() < deadline && bot.blockAt(position)?.name === expected)
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      const removed = bot.blockAt(position)?.name !== expected;
+      return removed ? result("SUCCESS", undefined, true) : result("FAILURE", "INTERACTION_FAILED", false);
+    } catch (error) {
+      const message = String((error as Error).message);
+      return result("FAILURE", /far|reach|view/i.test(message) ? "TARGET_UNREACHABLE" : "INTERACTION_FAILED");
+    }
+  }
   async close() {
+    this.blocking = false;
+    if (this.usingItemSince) this.bot?.deactivateItem();
+    this.usingItemSince = 0;
     this.progression?.close();
     this.progression = undefined;
     this.sensors?.close();
@@ -150,6 +431,20 @@ export class MinecraftEnvironment implements Environment {
       );
     this.progression?.setOrigin("setup");
     this.bot!.clearControlStates();
+    if (this.blocking) {
+      this.bot!.deactivateItem();
+      this.blocking = false;
+    }
+    if (this.usingItemSince) {
+      this.bot!.deactivateItem();
+      this.usingItemSince = 0;
+    }
+    this.lastAttackAt = 0;
+    this.lastAttackTarget = undefined;
+    this.lastRangedAttackAt = 0;
+    this.lastRangedAttackTarget = undefined;
+    this.confirmedHits = 0;
+    this.recentHurt.clear();
     await this.respawn();
     const resetBot = this.bot!;
     let vitalsSynced = !setup.resetVitals;

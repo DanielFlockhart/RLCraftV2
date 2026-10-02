@@ -14,6 +14,7 @@ import { join } from "node:path";
 import type { RunSpec, PolicyObservation } from "@mlcraft/core";
 import {
   motorArena,
+  motorNaturalTarget,
   motorReachedTarget,
   motorReward,
   motorSessions,
@@ -23,6 +24,7 @@ import {
 import {
   ARENA_BLOCK_BUDGET,
   arenaBlockCount,
+  arenaCellOrigin,
   arenaSpawn,
 } from "../packages/core/src/arenas.js";
 import {
@@ -54,6 +56,26 @@ test("every motor session has a valid separate arena and target", () => {
       target.x > arena.origin.x &&
         target.x < arena.origin.x + arena.blueprint.width + 2,
     );
+  }
+});
+
+test("M8 targets stay on clear floor across seeded obstacle layouts", () => {
+  for (let seed = 0; seed < 100; seed++) {
+    const arena = motorArena("M8", seed);
+    const origin = arenaCellOrigin(arena, 0);
+    for (const episode of [1, 2, 3]) {
+      const target = motorTarget(arena, "M8", 0, episode, seed, 64);
+      const x = Math.floor(target.x - origin.x - 1);
+      const z = Math.floor(target.z - origin.z - 1);
+      assert.ok(x >= 1 && x < arena.blueprint.width - 1);
+      assert.equal(target.y, arenaSpawn(arena, 0).y);
+      assert.ok(!arena.blueprint.regions.some((region) =>
+        region.block !== "minecraft:water" && region.block !== "minecraft:air" &&
+        region.from.x <= x && region.to.x >= x &&
+        region.from.z <= z && region.to.z >= z &&
+        region.from.y <= 1 && region.to.y >= 0,
+      ), `Seed ${seed} episode ${episode} placed a target inside a block`);
+    }
   }
 });
 
@@ -151,6 +173,21 @@ test("motor reward follows actual target progress", () => {
       motorReward(before, closer, { x: 2, y: 0, z: 0 }, true),
     8,
   );
+});
+
+test("natural terrain targets vary by seed and use horizontal progress", () => {
+  const spawn = { x: 50, y: 70, z: -20 };
+  const target = motorNaturalTarget(spawn, 49, "123456", 81, 0, 12, 80);
+  assert.deepEqual(target, motorNaturalTarget(spawn, 49, "123456", 81, 0, 12, 80));
+  assert.notDeepEqual(target, motorNaturalTarget(spawn, 49, "987654", 81, 0, 12, 80));
+  const distance = Math.hypot(target.x - spawn.x, target.z - spawn.z);
+  assert.ok(distance >= 12 && distance <= 80);
+  const observation = {
+    position: { x: target.x, y: 95, z: target.z },
+    health: 20, food: 20, inventory: {}, tick: 1,
+  };
+  assert.equal(motorReachedTarget(observation, target, true), true);
+  assert.equal(motorReachedTarget(observation, target), false);
 });
 
 test("every genome receives the same three seeded directions before evolution", () => {

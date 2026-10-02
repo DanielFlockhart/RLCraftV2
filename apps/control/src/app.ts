@@ -1,5 +1,5 @@
 import Fastify from "fastify";
-import { timingSafeEqual, randomUUID } from "node:crypto";
+import { timingSafeEqual, randomUUID, randomInt } from "node:crypto";
 import { z } from "zod";
 import { resolve } from "node:path";
 import { stat, readFile } from "node:fs/promises";
@@ -12,6 +12,11 @@ import {
   type Snapshot,
   type MotorFullRun,
   type MotorFullRunStage,
+  type MotorTerrainRun,
+  type CombatFullRun,
+  type CombatFullRunStage,
+  type CombatSession,
+  type InteractionSession,
   type Run,
 } from "@mlcraft/core";
 import {
@@ -48,15 +53,35 @@ import { inputCatalog } from "@mlcraft/core";
 import { protocolCatalog } from "../../../packages/agents/src/inputs/catalog.js";
 import { playbackSchema } from "./playback.js";
 import { backendRegistry } from "./backends.js";
+import { loadBackendRegistry } from "../../../packages/agents/src/backends/registry.js";
 import {
   fabricRoot,
   readFabricManifest,
   renderSchema,
 } from "../../../packages/runtime/src/fabric.js";
 import { backendIdSchema } from "../../../packages/agents/src/backends/registry.js";
-import { motorArena, motorSessions, motorTrialPlan } from "../../../packages/core/src/motor.js";
+import {
+  motorArena,
+  motorSessions,
+  motorTrialPlan,
+} from "../../../packages/core/src/motor.js";
 import { MotorNeat } from "../../../packages/agents/src/motor-neat.js";
+import { CombatNeat } from "../../../packages/agents/src/combat-neat.js";
 import { motorInputConfig } from "./motor-inputs.js";
+import { combatInputConfig } from "./combat-inputs.js";
+import {
+  combatArena,
+  combatSession,
+  combatSessions,
+  combatSetup,
+  combatFullRunTargetEpisodes,
+} from "../../../packages/core/src/combat.js";
+import {
+  interactionArena,
+  interactionSessions,
+  interactionSetup,
+  skillAffordance,
+} from "../../../packages/core/src/interaction.js";
 import { summarizeMotorTrials } from "./motor-full-run.js";
 import {
   arenaSpecSchema,
@@ -70,16 +95,48 @@ export const runSchema = z
     stage: z.enum([
       "movement",
       "motor",
+      "interaction",
       "wood_collection",
       "block_collection",
       "survival",
       "pvp",
     ]),
-    motor: z.enum(["M0", "M1", "M2", "M3", "M4", "M5", "M6", "M7", "M8"]).optional(),
+    motor: z
+      .enum(["M0", "M1", "M2", "M3", "M4", "M5", "M6", "M7", "M8"])
+      .optional(),
+    combat: z
+      .enum(
+        combatSessions.map((session) => session.id) as [
+          CombatSession,
+          ...CombatSession[],
+        ],
+      )
+      .optional(),
+    interaction: z.enum(interactionSessions.map((session) => session.id) as [InteractionSession, ...InteractionSession[]]).optional(),
+    combatSource: z.uuid().optional(),
+    combatResume: z.uuid().optional(),
+    combatTransfer: z.boolean().optional(),
+    combatFullRunId: z.uuid().optional(),
+    combatFullRunStage: z
+      .number()
+      .int()
+      .min(0)
+      .max(combatSessions.length - 1)
+      .optional(),
     motorSource: z.uuid().optional(),
     motorResume: z.uuid().optional(),
     motorFullRunId: z.uuid().optional(),
     motorFullRunStage: z.number().int().min(0).max(8).optional(),
+    motorTerrain: z
+      .object({
+        planId: z.uuid(),
+        worldSeed: z.string().regex(/^\d{1,10}$/),
+        minDistance: z.number().int().min(4).max(256),
+        maxDistance: z.number().int().min(4).max(256),
+        spreadRadius: z.number().int().min(32).max(2048),
+      })
+      .strict()
+      .optional(),
     mode: z.enum(["simulator", "minecraft"]).default("minecraft"),
     backend: backendIdSchema.optional(),
     render: renderSchema.optional(),
@@ -87,7 +144,7 @@ export const runSchema = z
       .enum(["pipeline", "environment", "evaluation"])
       .default("pipeline"),
     agents: z.number().int().min(1).max(128).default(4),
-    episodes: z.number().int().min(1).max(100000).default(10),
+    episodes: z.number().int().min(1).max(1000000000).default(10),
     ticksPerEpisode: z.number().int().min(1).max(100000).default(100),
     tickMs: z.number().int().min(20).max(5000).default(100),
     seed: z.number().int().min(0).max(2147483647).default(42),
@@ -103,16 +160,96 @@ export const runSchema = z
   .strict()
   .superRefine((spec, ctx) => {
     if (spec.stage === "motor" && !spec.motor)
-      ctx.addIssue({ code: "custom", path: ["motor"], message: "Select a motor session M0–M8" });
+      ctx.addIssue({
+        code: "custom",
+        path: ["motor"],
+        message: "Select a motor session M0–M8",
+      });
+    if (spec.stage === "interaction" && !spec.interaction)
+      ctx.addIssue({ code: "custom", path: ["interaction"], message: "Select a Phase 3C targeting or mining session" });
+    if (spec.interaction && spec.stage !== "interaction")
+      ctx.addIssue({ code: "custom", path: ["interaction"], message: "Interaction session requires the interaction stage" });
+    if (spec.stage === "interaction" && (spec.mode !== "minecraft" || !spec.arena || spec.arena.layout !== "individual" || !spec.setup))
+      ctx.addIssue({ code: "custom", path: ["arena"], message: "Interaction training requires individual Minecraft arenas and agent setup" });
     if (spec.motor && spec.stage !== "motor")
-      ctx.addIssue({ code: "custom", path: ["motor"], message: "Motor session requires the motor stage" });
+      ctx.addIssue({
+        code: "custom",
+        path: ["motor"],
+        message: "Motor session requires the motor stage",
+      });
+    if (spec.stage === "pvp" && !spec.combat)
+      ctx.addIssue({
+        code: "custom",
+        path: ["combat"],
+        message: `Select a combat session C0-C${combatSessions.length - 1}`,
+      });
+    if (spec.combat && spec.stage !== "pvp")
+      ctx.addIssue({
+        code: "custom",
+        path: ["combat"],
+        message: "Combat session requires the combat stage",
+      });
+    if (spec.combatTransfer && !spec.combatResume)
+      ctx.addIssue({
+        code: "custom",
+        path: ["combatTransfer"],
+        message: "Combat transfer requires a population checkpoint",
+      });
+    if (spec.combatResume && (spec.stage !== "pvp" || spec.combatSource))
+      ctx.addIssue({
+        code: "custom",
+        path: ["combatResume"],
+        message:
+          "Combat resume requires the combat stage and cannot use a champion source",
+      });
+    if (
+      (spec.combatFullRunId === undefined) !==
+        (spec.combatFullRunStage === undefined) ||
+      (spec.combatFullRunId && spec.stage !== "pvp")
+    )
+      ctx.addIssue({
+        code: "custom",
+        path: ["combatFullRunId"],
+        message: "Combat Full Run ID and stage require each other",
+      });
     if (spec.motorSource && spec.stage !== "motor")
-      ctx.addIssue({ code: "custom", path: ["motorSource"], message: "Motor source requires the motor stage" });
+      ctx.addIssue({
+        code: "custom",
+        path: ["motorSource"],
+        message: "Motor source requires the motor stage",
+      });
     if (spec.motorResume && (spec.stage !== "motor" || spec.motorSource))
-      ctx.addIssue({ code: "custom", path: ["motorResume"], message: "Motor resume requires the motor stage and cannot use a champion source" });
-    if ((spec.motorFullRunId === undefined) !== (spec.motorFullRunStage === undefined) ||
-        (spec.motorFullRunId && spec.stage !== "motor"))
-      ctx.addIssue({ code: "custom", path: ["motorFullRunId"], message: "Full Run ID and stage require each other and the motor stage" });
+      ctx.addIssue({
+        code: "custom",
+        path: ["motorResume"],
+        message:
+          "Motor resume requires the motor stage and cannot use a champion source",
+      });
+    if (
+      (spec.motorFullRunId === undefined) !==
+        (spec.motorFullRunStage === undefined) ||
+      (spec.motorFullRunId && spec.stage !== "motor")
+    )
+      ctx.addIssue({
+        code: "custom",
+        path: ["motorFullRunId"],
+        message: "Full Run ID and stage require each other and the motor stage",
+      });
+    if (
+      spec.motorTerrain &&
+      (spec.stage !== "motor" ||
+        spec.motor !== "M7" ||
+        spec.component !== "pipeline" ||
+        !!spec.arena ||
+        !spec.motorResume ||
+        spec.motorTerrain.maxDistance < spec.motorTerrain.minDistance)
+    )
+      ctx.addIssue({
+        code: "custom",
+        path: ["motorTerrain"],
+        message:
+          "Natural terrain training requires an M7 population checkpoint and valid distances",
+      });
   })
   .transform((spec) => ({
     ...spec,
@@ -123,7 +260,9 @@ export const runSchema = z
       spec.inputs ??
       (spec.stage === "motor"
         ? motorInputConfig()
-        : structuredClone(defaultInputConfig)),
+        : spec.stage === "pvp"
+          ? combatInputConfig()
+          : structuredClone(defaultInputConfig)),
     ...(spec.mode === "minecraft" && !spec.rules
       ? { rules: structuredClone(DEFAULT_TRAINING_RULES) }
       : {}),
@@ -131,32 +270,60 @@ export const runSchema = z
       ? { setup: structuredClone(DEFAULT_AGENT_SETUP) }
       : {}),
   }));
-const fullRunStageSchema = z.object({
-  session: z.enum(["M0", "M1", "M2", "M3", "M4", "M5", "M6", "M7", "M8"]),
-  agents: z.number().int().min(1).max(config.MAX_AGENTS),
-  episodes: z.number().int().min(1).max(100000),
-  ticksPerEpisode: z.number().int().min(1).max(100000),
-  tickMs: z.number().int().min(20).max(5000),
-  seed: z.number().int().min(0).max(2147483647),
-  backend: z.enum(["mineflayer", "fabric"]),
-  minSuccessRate: z.number().min(0).max(1).default(0),
-  minBestFitness: z.number().finite().optional(),
-  maxAttempts: z.number().int().min(1).max(10).default(1),
-}).strict();
-const fullRunRequestSchema = z.object({
-  stages: z.array(fullRunStageSchema).length(9),
-}).strict().superRefine(({ stages: configured }, ctx) => {
-  configured.forEach((stage, index) => {
-    if (stage.session !== motorSessions[index].id)
-      ctx.addIssue({ code: "custom", path: ["stages", index, "session"], message: `Expected ${motorSessions[index].id}` });
-    if (index < 8 && stage.episodes < motorTrialPlan(1, stage.agents).episodesPerEvolution)
-      ctx.addIssue({ code: "custom", path: ["stages", index, "episodes"], message: "Complete at least one full NEAT evolution" });
-    if (index === 8 && (stage.maxAttempts !== 1 || stage.minBestFitness !== undefined))
-      ctx.addIssue({ code: "custom", path: ["stages", index], message: "M8 is frozen evaluation and runs once without a fitness gate" });
+const fullRunStageSchema = z
+  .object({
+    session: z.enum(["M0", "M1", "M2", "M3", "M4", "M5", "M6", "M7", "M8"]),
+    agents: z.number().int().min(1).max(config.MAX_AGENTS),
+    episodes: z.number().int().min(1).max(100000),
+    ticksPerEpisode: z.number().int().min(1).max(100000),
+    tickMs: z.number().int().min(20).max(5000),
+    seed: z.number().int().min(0).max(2147483647),
+    backend: z.enum(["mineflayer", "fabric"]),
+    minSuccessRate: z.number().min(0).max(1).default(0),
+    minBestFitness: z.number().finite().optional(),
+    maxAttempts: z.number().int().min(1).max(10).default(1),
+  })
+  .strict();
+const fullRunRequestSchema = z
+  .object({
+    stages: z.array(fullRunStageSchema).length(9),
+  })
+  .strict()
+  .superRefine(({ stages: configured }, ctx) => {
+    configured.forEach((stage, index) => {
+      if (stage.session !== motorSessions[index].id)
+        ctx.addIssue({
+          code: "custom",
+          path: ["stages", index, "session"],
+          message: `Expected ${motorSessions[index].id}`,
+        });
+      if (
+        index < 8 &&
+        stage.episodes < motorTrialPlan(1, stage.agents).episodesPerEvolution
+      )
+        ctx.addIssue({
+          code: "custom",
+          path: ["stages", index, "episodes"],
+          message: "Complete at least one full NEAT evolution",
+        });
+      if (
+        index === 8 &&
+        (stage.maxAttempts !== 1 || stage.minBestFitness !== undefined)
+      )
+        ctx.addIssue({
+          code: "custom",
+          path: ["stages", index],
+          message:
+            "M8 is frozen evaluation and runs once without a fitness gate",
+        });
+    });
+    if (configured[7]?.seed === configured[8]?.seed)
+      ctx.addIssue({
+        code: "custom",
+        path: ["stages", 8, "seed"],
+        message: "M8 needs a different terrain seed from M7",
+      });
   });
-  if (configured[7]?.seed === configured[8]?.seed)
-    ctx.addIssue({ code: "custom", path: ["stages", 8, "seed"], message: "M8 needs a different terrain seed from M7" });
-});
 export function createApp(
   store = new Store(resolve(config.dataDir, "control.sqlite")),
 ) {
@@ -198,12 +365,18 @@ export function createApp(
       spawn: (id, runId, username, index) =>
         server.spawnArenaAgent(id, runId, username, index),
       cancel: (runId) => server.cancelArena(runId),
+      status: (id, runId) => server.combatArenaStatus(id, runId),
     },
     {
       apply: (id, runId, rules, agents) =>
         server.applyTrainingRules(id, runId, rules, agents),
       release: (runId) => server.releaseTrainingRules(runId),
     },
+    (username, radius) => {
+      server.command(`spreadplayers 0 0 16 ${radius} false ${username}`);
+    },
+    (requestId, username, target) =>
+      server.resolveNaturalTarget(requestId, username, target),
   );
   const preparation = new ServerPreparation(store, () => {
     if (
@@ -251,37 +424,90 @@ export function createApp(
     expectedBackendRevision?: string,
   ) {
     if (spec.stage === "motor") {
-      const activePlan = store.motorFullRuns().find((plan) => ["running", "paused"].includes(plan.status));
+      const activePlan = store
+        .motorFullRuns()
+        .find((plan) => ["running", "paused"].includes(plan.status));
       if (activePlan && spec.motorFullRunId !== activePlan.id)
-        throw new Error("A Phase 3A Full Run is active; pause or stop it before starting a separate motor run");
-      if (store.runs(1000).some((run) => run.spec.mode === "minecraft" && ["queued", "running", "paused", "pausing"].includes(run.status)))
-        throw new Error("Motor sessions run alone; finish or cancel other Minecraft runs first");
-      const source = spec.motorSource ? store.getRun(spec.motorSource) : undefined;
+        throw new Error(
+          "A Phase 3A Full Run is active; pause or stop it before starting a separate motor run",
+        );
+      const terrainPlan = store
+        .motorTerrainRuns()
+        .find((plan) => plan.status === "running");
+      if (terrainPlan && spec.motorTerrain?.planId !== terrainPlan.id)
+        throw new Error(
+          "A natural terrain continuation is active; stop it before starting another motor run",
+        );
+      if (
+        store
+          .runs(1000)
+          .some(
+            (run) =>
+              run.spec.mode === "minecraft" &&
+              ["queued", "running", "paused", "pausing"].includes(run.status),
+          )
+      )
+        throw new Error(
+          "Motor sessions run alone; finish or cancel other Minecraft runs first",
+        );
+      const source = spec.motorSource
+        ? store.getRun(spec.motorSource)
+        : undefined;
       if (spec.motorResume) {
         const previous = store.getRun(spec.motorResume);
-        if (!previous || !["completed", "interrupted", "failed", "cancelled"].includes(previous.status) ||
-            previous.spec.stage !== "motor" || previous.spec.component !== "pipeline" ||
-            previous.spec.motor !== spec.motor || previous.spec.agents !== spec.agents ||
-            previous.spec.seed !== spec.seed || previous.spec.backend !== spec.backend ||
-            previous.spec.ticksPerEpisode !== spec.ticksPerEpisode ||
-            previous.spec.tickMs !== spec.tickMs ||
-            previous.spec.speed !== spec.speed ||
-            previous.spec.generationSeconds !== spec.generationSeconds ||
-            JSON.stringify(previous.spec.arena) !== JSON.stringify(spec.arena) ||
-            JSON.stringify(previous.spec.inputs) !== JSON.stringify(spec.inputs) ||
-            JSON.stringify(previous.spec.rules) !== JSON.stringify(spec.rules) ||
-            JSON.stringify(previous.spec.setup) !== JSON.stringify(spec.setup) ||
-            JSON.stringify(previous.spec.render) !== JSON.stringify(spec.render))
-          throw new Error("Resume requires a finished run with the same session, population, seed, backend, and training settings");
-        const checkpoint = JSON.parse(await readFile(resolve(config.artifactDir, previous.id, "checkpoint.json"), "utf8"));
+        const terrainTransfer =
+          !!spec.motorTerrain &&
+          (previous?.spec.motorTerrain?.planId === spec.motorTerrain.planId ||
+            (previous?.spec.motor === "M7" && !previous.spec.motorTerrain));
+        if (
+          !previous ||
+          !["completed", "interrupted", "failed", "cancelled"].includes(
+            previous.status,
+          ) ||
+          previous.spec.stage !== "motor" ||
+          previous.spec.component !== "pipeline" ||
+          previous.spec.motor !== spec.motor ||
+          previous.spec.agents !== spec.agents ||
+          previous.spec.seed !== spec.seed ||
+          previous.spec.backend !== spec.backend ||
+          (!terrainTransfer &&
+            previous.spec.ticksPerEpisode !== spec.ticksPerEpisode) ||
+          previous.spec.tickMs !== spec.tickMs ||
+          previous.spec.speed !== spec.speed ||
+          previous.spec.generationSeconds !== spec.generationSeconds ||
+          (!terrainTransfer &&
+            JSON.stringify(previous.spec.arena) !==
+              JSON.stringify(spec.arena)) ||
+          JSON.stringify(previous.spec.inputs) !==
+            JSON.stringify(spec.inputs) ||
+          JSON.stringify(previous.spec.rules) !== JSON.stringify(spec.rules) ||
+          JSON.stringify(previous.spec.setup) !== JSON.stringify(spec.setup) ||
+          JSON.stringify(previous.spec.render) !== JSON.stringify(spec.render)
+        )
+          throw new Error(
+            "Resume requires a finished run with the same session, population, seed, backend, and training settings",
+          );
+        const checkpoint = JSON.parse(
+          await readFile(
+            resolve(config.artifactDir, previous.id, "checkpoint.json"),
+            "utf8",
+          ),
+        );
         const completedEpisodes = checkpoint.resumeState
           ? checkpoint.episode
-          : checkpoint.generation * motorTrialPlan(1, spec.agents).episodesPerEvolution;
-        if (checkpoint.kind !== "neat-rl" || checkpoint.session !== spec.motor ||
-            checkpoint.seed !== spec.seed ||
-            !Number.isSafeInteger(completedEpisodes) || completedEpisodes < 0 ||
-            completedEpisodes >= spec.episodes)
-          throw new Error("Run has no compatible population checkpoint or no new episodes to train");
+          : checkpoint.generation *
+            motorTrialPlan(1, spec.agents).episodesPerEvolution;
+        if (
+          checkpoint.kind !== "neat-rl" ||
+          checkpoint.session !== spec.motor ||
+          checkpoint.seed !== spec.seed ||
+          !Number.isSafeInteger(completedEpisodes) ||
+          completedEpisodes < 0 ||
+          completedEpisodes >= spec.episodes
+        )
+          throw new Error(
+            "Run has no compatible population checkpoint or no new episodes to train",
+          );
         new MotorNeat(spec, config.artifactDir);
       }
       if (spec.motorSource) {
@@ -290,21 +516,151 @@ export function createApp(
       }
       if (spec.motor === "M8") {
         if (source?.spec.motor !== "M7" || source.spec.seed === spec.seed)
-          throw new Error("M8 requires a completed M7 source and a different terrain seed");
-        const checkpoint = JSON.parse(await readFile(resolve(config.artifactDir, source.id, "checkpoint.json"), "utf8"));
+          throw new Error(
+            "M8 requires a completed M7 source and a different terrain seed",
+          );
+        const checkpoint = JSON.parse(
+          await readFile(
+            resolve(config.artifactDir, source.id, "checkpoint.json"),
+            "utf8",
+          ),
+        );
         if (checkpoint.kind !== "neat-rl" || checkpoint.generation < 1)
           throw new Error("M8 requires an evolved M7 champion");
       }
       const catalog = await worlds.catalog();
-      const profile = catalog.profiles.find((profile) => profile.id === catalog.active?.profileId);
-      if (spec.mode !== "minecraft" ||
+      const profile = catalog.profiles.find(
+        (profile) => profile.id === catalog.active?.profileId,
+      );
+      if (
+        spec.mode !== "minecraft" ||
         spec.component !== (spec.motor === "M8" ? "evaluation" : "pipeline") ||
-        (spec.motor === "M8" && !spec.motorSource) || !spec.motor ||
-        profile?.name !== "MLCraft Motor Superflat" || (await worlds.context())?.settings.type !== "flat" ||
-        JSON.stringify(spec.arena) !== JSON.stringify(motorArena(spec.motor, spec.seed)))
-        throw new Error("Motor sessions require the dedicated superflat world and their isolated stage arena");
+        (spec.motor === "M8" && !spec.motorSource) ||
+        !spec.motor ||
+        (spec.motorTerrain
+          ? (await worlds.context())?.settings.type !== "survival" ||
+            (await worlds.context())?.settings.seed !==
+              spec.motorTerrain.worldSeed ||
+            !!spec.arena
+          : profile?.name !== "MLCraft Motor Superflat" ||
+            (await worlds.context())?.settings.type !== "flat" ||
+            JSON.stringify(spec.arena) !==
+              JSON.stringify(motorArena(spec.motor, spec.seed)))
+      )
+        throw new Error(
+          spec.motorTerrain
+            ? "Natural training requires its recorded generated survival world"
+            : "Motor sessions require the dedicated superflat world and their isolated stage arena",
+        );
+    }
+    if (spec.stage === "pvp") {
+      const activePlan = store
+        .combatFullRuns(1000)
+        .find((plan) => ["running", "paused"].includes(plan.status));
+      if (activePlan && spec.combatFullRunId !== activePlan.id)
+        throw new Error(
+          "A Combat Full Run is active; pause or stop it before starting a separate combat run",
+        );
+      if (
+        spec.mode !== "minecraft" ||
+        spec.component !== "pipeline" ||
+        spec.backend !== "mineflayer" ||
+        !spec.combat ||
+        JSON.stringify(spec.arena) !==
+          JSON.stringify(combatArena(spec.combat, spec.seed)) ||
+        JSON.stringify(spec.setup) !== JSON.stringify(combatSetup(spec.combat))
+      )
+        throw new Error(
+          "Combat training requires its managed Minecraft arena, loadout, and Mineflayer combat controls",
+        );
+      if (
+        store
+          .motorTerrainRuns(1000)
+          .some((plan) => plan.status === "running") ||
+        store
+          .motorFullRuns(1000)
+          .some((plan) => ["running", "paused"].includes(plan.status))
+      )
+        throw new Error(
+          "Stop Phase 3A training before starting combat training",
+        );
+      if (
+        store
+          .runs(1000)
+          .some(
+            (run) =>
+              run.spec.mode === "minecraft" &&
+              ["queued", "running", "paused", "pausing"].includes(run.status),
+          )
+      )
+        throw new Error(
+          "Combat sessions run alone; finish or cancel the active Minecraft run",
+        );
+      const context = await worlds.context();
+      const catalog = await worlds.catalog();
+      const profile = catalog.profiles.find(
+        (entry) => entry.id === catalog.active?.profileId,
+      );
+      if (
+        profile?.name !== "MLCraft Combat Superflat" ||
+        context?.settings.type !== "flat"
+      )
+        throw new Error(
+          "Prepare the dedicated combat world before starting combat training",
+        );
+      if (spec.combatResume) {
+        const previous = store.getRun(spec.combatResume);
+        if (
+          !previous ||
+          !["completed", "interrupted", "failed", "cancelled"].includes(
+            previous.status,
+          ) ||
+          previous.spec.stage !== "pvp" ||
+          previous.spec.component !== "pipeline" ||
+          previous.spec.agents !== spec.agents ||
+          previous.spec.seed !== spec.seed ||
+          previous.spec.backend !== spec.backend ||
+          (!spec.combatTransfer &&
+            (previous.spec.combat !== spec.combat ||
+              previous.spec.ticksPerEpisode !== spec.ticksPerEpisode ||
+              previous.spec.tickMs !== spec.tickMs ||
+              JSON.stringify(previous.spec.arena) !==
+                JSON.stringify(spec.arena)))
+        )
+          throw new Error(
+            "Combat continuation requires a compatible complete population checkpoint",
+          );
+        const checkpoint = JSON.parse(
+          await readFile(
+            resolve(config.artifactDir, previous.id, "checkpoint.json"),
+            "utf8",
+          ),
+        );
+        const completed = spec.combatTransfer
+          ? checkpoint.generation *
+            motorTrialPlan(1, spec.agents).episodesPerEvolution
+          : checkpoint.episode;
+        if (
+          checkpoint.kind !== "neat-rl" ||
+          !checkpoint.resumeState ||
+          !Number.isSafeInteger(completed) ||
+          completed >= spec.episodes
+        )
+          throw new Error(
+            "Combat checkpoint or requested continuation is invalid",
+          );
+        new CombatNeat(spec, config.artifactDir);
+      }
     }
     const backend = (await backendRegistry).select(spec, config.MC_VERSION);
+    if (backend.descriptor.id === "mineflayer") {
+      const current = (await loadBackendRegistry(
+        config.AGENT_BACKENDS_FILE ? resolve(root, config.AGENT_BACKENDS_FILE) : undefined,
+        config.MC_AGENT_BACKEND,
+      )).select(spec, config.MC_VERSION);
+      if (current.revision !== backend.revision)
+        throw new Error("Mineflayer backend source changed while control was running. Restart the control service before starting or resuming training.");
+    }
     if (backend.descriptor.id === "fabric") {
       if (config.MC_AUTH !== "offline")
         throw new Error(
@@ -363,9 +719,15 @@ export function createApp(
       throw new Error(
         "Select this run's recorded world generation before rerunning it",
       );
-    if (spec.motorResume &&
-        store.getRun(spec.motorResume)?.world?.generationId !== world?.generationId)
-      throw new Error("Select the checkpoint run's recorded world generation before continuing training");
+    if (
+      spec.motorResume &&
+      !spec.motorTerrain &&
+      store.getRun(spec.motorResume)?.world?.generationId !==
+        world?.generationId
+    )
+      throw new Error(
+        "Select the checkpoint run's recorded world generation before continuing training",
+      );
     if (spec.mode === "minecraft") arenaConflict(spec, store.runs(1000));
     validateRulesCompatibility(spec, store.runs(1000));
     return scheduler.enqueue(spec, world, backend);
@@ -561,17 +923,21 @@ export function createApp(
         };
   });
   app.get("/runs/:id/agents/:username/sound", async (req) => {
-    const { id, username } = z.object({
-      id: z.uuid(),
-      username: z.string().regex(/^rl_[a-f0-9]{6}_\d{1,3}$/),
-    }).parse(req.params);
+    const { id, username } = z
+      .object({
+        id: z.uuid(),
+        username: z.string().regex(/^rl_[a-f0-9]{6}_\d{1,3}$/),
+      })
+      .parse(req.params);
     return scheduler.soundAgent(id, username);
   });
   app.post("/runs/:id/agents/:username/sound", async (req) => {
-    const { id, username } = z.object({
-      id: z.uuid(),
-      username: z.string().regex(/^rl_[a-f0-9]{6}_\d{1,3}$/),
-    }).parse(req.params);
+    const { id, username } = z
+      .object({
+        id: z.uuid(),
+        username: z.string().regex(/^rl_[a-f0-9]{6}_\d{1,3}$/),
+      })
+      .parse(req.params);
     const { muted } = z.object({ muted: z.boolean() }).strict().parse(req.body);
     return scheduler.soundAgent(id, username, muted);
   });
@@ -618,6 +984,19 @@ export function createApp(
       error:
         "No model inspection yet. Start a new run; older runs have no model snapshot.",
     });
+  });
+  app.get("/models/run/:id/variant/:fingerprint", async (req, reply) => {
+    const { id, fingerprint } = req.params as { id: string; fingerprint: string };
+    if (!z.string().uuid().safeParse(id).success || !store.getRun(id) || !/^[a-f0-9]{64}$/.test(fingerprint))
+      return reply.code(404).send({ error: "Model variant not found" });
+    try {
+      const detail = JSON.parse(await readFile(resolve(config.artifactDir, id, "models-detail.json"), "utf8")) as import("@mlcraft/core").ModelSnapshot;
+      const variant = detail.variants.find((entry) => entry.fingerprint === fingerprint);
+      if (variant) return variant.inspection;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+    return reply.code(404).send({ error: "Model variant not found" });
   });
   app.post("/archive/sync", async () => {
     if (!firebase)
@@ -747,100 +1126,410 @@ export function createApp(
   const motorWorldName = "MLCraft Motor Superflat";
   async function motorWorldState() {
     const catalog = await worlds.catalog();
-    const profile = catalog.profiles.find((profile) => profile.id === catalog.active?.profileId);
-    const generation = profile?.generations.find((generation) => generation.id === catalog.active?.generationId);
-    const ready = profile?.name === motorWorldName && generation?.settings.type === "flat" && server.state.status === "running" && !!server.state.arenaReady;
-    return { ready, profile: profile?.name, server: server.state.status,
-      reason: ready ? "" : profile?.name !== motorWorldName ? "Prepare the dedicated motor superflat world" : server.state.status !== "running" ? "Start the Minecraft server" : "Arena plugin is unavailable" };
+    const profile = catalog.profiles.find(
+      (profile) => profile.id === catalog.active?.profileId,
+    );
+    const generation = profile?.generations.find(
+      (generation) => generation.id === catalog.active?.generationId,
+    );
+    const ready =
+      profile?.name === motorWorldName &&
+      generation?.settings.type === "flat" &&
+      server.state.status === "running" &&
+      !!server.state.arenaReady;
+    return {
+      ready,
+      profile: profile?.name,
+      server: server.state.status,
+      reason: ready
+        ? ""
+        : profile?.name !== motorWorldName
+          ? "Prepare the dedicated motor superflat world"
+          : server.state.status !== "running"
+            ? "Start the Minecraft server"
+            : "Arena plugin is unavailable",
+    };
   }
   app.get("/phase3a/world", motorWorldState);
   let motorWorldPreparation: Promise<void> | undefined;
   async function prepareMotorWorld() {
     if ((await motorWorldState()).ready) return;
     if (motorWorldPreparation) return motorWorldPreparation;
+    if (store.motorTerrainRuns(1000).some((plan) => plan.status === "running"))
+      throw new Error(
+        "Stop natural terrain training before switching to the motor superflat world",
+      );
     motorWorldPreparation = (async () => {
-    if (scheduler.hasMinecraftWorkers() || store.queued().some((run) => run.spec.mode === "minecraft"))
-      throw new Error("Finish or cancel active Minecraft runs before switching to the motor world");
-    if (server.state.status === "running") await server.stop();
-    const catalog = await worlds.catalog();
-    const existing = catalog.profiles.find((profile) => profile.name === motorWorldName);
-    if (existing) await worlds.activate(existing.id, existing.generations[0].id);
-    else await worlds.create({
-      name: motorWorldName,
-      settings: {
-        type: "flat", seed: "31415926", difficulty: "peaceful", gamemode: "survival", structures: false,
-        flat: { biome: "minecraft:plains", layers: [
-          { block: "minecraft:bedrock", height: 1 },
-          { block: "minecraft:dirt", height: 2 },
-          { block: "minecraft:grass_block", height: 1 },
-        ] },
-      },
+      if (
+        scheduler.hasMinecraftWorkers() ||
+        store.queued().some((run) => run.spec.mode === "minecraft")
+      )
+        throw new Error(
+          "Finish or cancel active Minecraft runs before switching to the motor world",
+        );
+      if (server.state.status === "running") await server.stop();
+      const catalog = await worlds.catalog();
+      const existing = catalog.profiles.find(
+        (profile) => profile.name === motorWorldName,
+      );
+      if (existing)
+        await worlds.activate(existing.id, existing.generations[0].id);
+      else
+        await worlds.create({
+          name: motorWorldName,
+          settings: {
+            type: "flat",
+            seed: "31415926",
+            difficulty: "peaceful",
+            gamemode: "survival",
+            structures: false,
+            flat: {
+              biome: "minecraft:plains",
+              layers: [
+                { block: "minecraft:bedrock", height: 1 },
+                { block: "minecraft:dirt", height: 2 },
+                { block: "minecraft:grass_block", height: 1 },
+              ],
+            },
+          },
+        });
+      await server.start();
+      const deadline = Date.now() + 90000;
+      while (Date.now() < deadline) {
+        const state = await motorWorldState();
+        if (state.ready) return;
+        if (server.state.status === "failed")
+          throw new Error("Motor world server failed to start");
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+      throw new Error("Motor world server did not become ready");
+    })().finally(() => {
+      motorWorldPreparation = undefined;
     });
-    await server.start();
-    const deadline = Date.now() + 90000;
-    while (Date.now() < deadline) {
-      const state = await motorWorldState();
-      if (state.ready) return;
-      if (server.state.status === "failed") throw new Error("Motor world server failed to start");
-      await new Promise((resolve) => setTimeout(resolve, 500));
-    }
-    throw new Error("Motor world server did not become ready");
-    })().finally(() => { motorWorldPreparation = undefined; });
     return motorWorldPreparation;
   }
-  app.post("/phase3a/world", async () => { await prepareMotorWorld(); return motorWorldState(); });
+  app.post("/phase3a/world", async () => {
+    await prepareMotorWorld();
+    return motorWorldState();
+  });
+  const combatWorldName = "MLCraft Combat Superflat";
+  async function combatWorldState() {
+    const catalog = await worlds.catalog();
+    const profile = catalog.profiles.find(
+      (entry) => entry.id === catalog.active?.profileId,
+    );
+    const generation = profile?.generations.find(
+      (entry) => entry.id === catalog.active?.generationId,
+    );
+    const ready =
+      profile?.name === combatWorldName &&
+      generation?.settings.type === "flat" &&
+      server.state.status === "running" &&
+      !!server.state.arenaReady;
+    return {
+      ready,
+      profile: profile?.name,
+      server: server.state.status,
+      reason: ready
+        ? ""
+        : profile?.name !== combatWorldName
+          ? "Prepare the dedicated combat world"
+          : server.state.status !== "running"
+            ? "Start the Minecraft server"
+            : "Arena plugin is unavailable",
+    };
+  }
+  let combatWorldPreparation: Promise<void> | undefined;
+  async function prepareCombatWorld() {
+    if ((await combatWorldState()).ready) return;
+    if (combatWorldPreparation) return combatWorldPreparation;
+    combatWorldPreparation = (async () => {
+      if (
+        store
+          .motorTerrainRuns(1000)
+          .some((plan) => plan.status === "running") ||
+        store
+          .motorFullRuns(1000)
+          .some((plan) => ["running", "paused"].includes(plan.status)) ||
+        scheduler.hasMinecraftWorkers() ||
+        store.queued().some((run) => run.spec.mode === "minecraft")
+      )
+        throw new Error(
+          "Finish or stop active Minecraft training before preparing the combat world",
+        );
+      if (server.state.status === "running") await server.stop();
+      const catalog = await worlds.catalog();
+      const existing = catalog.profiles.find(
+        (profile) => profile.name === combatWorldName,
+      );
+      if (existing)
+        await worlds.activate(existing.id, existing.generations[0].id);
+      else
+        await worlds.create({
+          name: combatWorldName,
+          settings: {
+            type: "flat",
+            seed: "27182818",
+            difficulty: "easy",
+            gamemode: "survival",
+            structures: false,
+            flat: {
+              biome: "minecraft:plains",
+              layers: [
+                { block: "minecraft:bedrock", height: 1 },
+                { block: "minecraft:dirt", height: 2 },
+                { block: "minecraft:grass_block", height: 1 },
+              ],
+            },
+          },
+        });
+      await server.start();
+      const deadline = Date.now() + 90000;
+      while (Date.now() < deadline) {
+        if ((await combatWorldState()).ready) return;
+        if (server.state.status === "failed")
+          throw new Error("Combat world server failed to start");
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+      throw new Error("Combat world server did not become ready");
+    })().finally(() => {
+      combatWorldPreparation = undefined;
+    });
+    return combatWorldPreparation;
+  }
+  app.get("/phase3d/world", combatWorldState);
+  app.post("/phase3d/world", async () => {
+    await prepareCombatWorld();
+    return combatWorldState();
+  });
+  const interactionWorldName = "MLCraft Interaction Superflat";
+  async function interactionWorldState() {
+    const catalog = await worlds.catalog();
+    const profile = catalog.profiles.find((entry) => entry.id === catalog.active?.profileId);
+    const generation = profile?.generations.find((entry) => entry.id === catalog.active?.generationId);
+    const ready = profile?.name === interactionWorldName &&
+      generation?.settings.type === "flat" &&
+      server.state.status === "running" && !!server.state.arenaReady;
+    return {
+      ready,
+      profile: profile?.name,
+      server: server.state.status,
+      reason: ready ? "" : profile?.name !== interactionWorldName
+        ? "Prepare the dedicated interaction world"
+        : server.state.status !== "running" ? "Start the Minecraft server"
+          : "Arena plugin is unavailable",
+    };
+  }
+  let interactionWorldPreparation: Promise<void> | undefined;
+  async function prepareInteractionWorld() {
+    if ((await interactionWorldState()).ready) return;
+    if (interactionWorldPreparation) return interactionWorldPreparation;
+    interactionWorldPreparation = (async () => {
+      if (
+        scheduler.hasMinecraftWorkers() ||
+        store.queued().some((run) => run.spec.mode === "minecraft") ||
+        store.combatFullRuns(1000).some((plan) => ["running", "paused"].includes(plan.status)) ||
+        store.motorFullRuns(1000).some((plan) => ["running", "paused"].includes(plan.status)) ||
+        store.motorTerrainRuns(1000).some((plan) => plan.status === "running")
+      )
+        throw new Error("Finish or stop active Minecraft training before preparing the interaction world");
+      if (server.state.status === "running") await server.stop();
+      const catalog = await worlds.catalog();
+      const existing = catalog.profiles.find((profile) => profile.name === interactionWorldName);
+      if (existing) await worlds.activate(existing.id, existing.generations[0].id);
+      else await worlds.create({
+        name: interactionWorldName,
+        settings: {
+          type: "flat", seed: "31415926", difficulty: "peaceful", gamemode: "survival", structures: false,
+          flat: { biome: "minecraft:plains", layers: [
+            { block: "minecraft:bedrock", height: 1 },
+            { block: "minecraft:dirt", height: 2 },
+            { block: "minecraft:grass_block", height: 1 },
+          ] },
+        },
+      });
+      await server.start();
+      const deadline = Date.now() + 90000;
+      while (Date.now() < deadline) {
+        if ((await interactionWorldState()).ready) return;
+        if (server.state.status === "failed") throw new Error("Interaction world server failed to start");
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+      throw new Error("Interaction world server did not become ready");
+    })().finally(() => { interactionWorldPreparation = undefined; });
+    return interactionWorldPreparation;
+  }
+  app.get("/phase3c/world", interactionWorldState);
+  app.post("/phase3c/world", async () => {
+    await prepareInteractionWorld();
+    return interactionWorldState();
+  });
+  app.get("/phase3c/sessions", async () => interactionSessions);
+  app.post("/phase3c/affordances", async (req) => {
+    const point = z.object({ x: z.number().finite(), y: z.number().finite(), z: z.number().finite() }).strict();
+    const { request, state } = z.object({
+      request: z.object({
+        skill: z.enum(["AIM", "MINE", "PLACE", "USE", "EAT", "EQUIP", "CRAFT", "OPEN", "STORE", "RETRIEVE", "SMELT"]),
+        target: z.object({
+          block: z.string().max(80).optional(), item: z.string().max(80).optional(),
+          position: point.optional(), container: point.optional(), recipe: z.string().max(80).optional(),
+        }).strict(),
+        parameters: z.object({ quantity: z.number().int().min(1).max(64).optional(), startYaw: z.number().finite().optional(), startPitch: z.number().finite().optional() }).strict().optional(),
+      }).strict(),
+      state: z.object({
+        inventory: z.record(z.string(), z.number().int().min(0).max(100000)),
+        distance: z.number().finite().min(0).optional(), targetExists: z.boolean().optional(),
+        workstations: z.array(z.string()).max(32).optional(), containerAvailable: z.boolean().optional(),
+        containerInventory: z.record(z.string(), z.number().int().min(0).max(100000)).optional(),
+      }).strict(),
+    }).strict().parse(req.body);
+    return skillAffordance(request, state);
+  });
+  app.post("/phase3c/sessions", async (req, reply) => {
+    const input = z.object({
+      session: z.enum(interactionSessions.map((session) => session.id) as [InteractionSession, ...InteractionSession[]]),
+      agents: z.number().int().min(1).max(config.MAX_AGENTS).default(Math.min(8, config.MAX_AGENTS)),
+      episodes: z.number().int().min(1).max(100000).default(32),
+      seed: z.number().int().min(0).max(2147483647).default(42),
+    }).strict().parse(req.body ?? {});
+    await prepareInteractionWorld();
+    const spec = runSchema.parse({
+      stage: "interaction", interaction: input.session, mode: "minecraft", component: "pipeline",
+      backend: "mineflayer", agents: input.agents, episodes: input.episodes,
+      ticksPerEpisode: 1, tickMs: 100, seed: input.seed,
+      arena: interactionArena(input.session), setup: interactionSetup(input.session),
+      rules: { ...DEFAULT_TRAINING_RULES, noHungerLoss: true, pvp: false,
+        world: { doMobSpawning: false, doDaylightCycle: false, doWeatherCycle: false, mobGriefing: false, doFireTick: false } },
+    });
+    return reply.code(201).send(await enqueue(spec));
+  });
   function motorSessionSpec(
-    settings: Pick<MotorFullRunStage, "session" | "agents" | "episodes" | "ticksPerEpisode" | "tickMs" | "seed" | "backend">,
+    settings: Pick<
+      MotorFullRunStage,
+      | "session"
+      | "agents"
+      | "episodes"
+      | "ticksPerEpisode"
+      | "tickMs"
+      | "seed"
+      | "backend"
+    >,
     sourceRunId?: string,
     fullRun?: { id: string; stage: number },
   ) {
     return runSchema.parse({
-      stage: "motor", motor: settings.session, mode: "minecraft",
+      stage: "motor",
+      motor: settings.session,
+      mode: "minecraft",
       component: settings.session === "M8" ? "evaluation" : "pipeline",
       ...(sourceRunId ? { motorSource: sourceRunId } : {}),
-      ...(fullRun ? { motorFullRunId: fullRun.id, motorFullRunStage: fullRun.stage } : {}),
-      agents: settings.agents, episodes: settings.episodes,
-      ticksPerEpisode: settings.ticksPerEpisode, tickMs: settings.tickMs,
-      seed: settings.seed, backend: settings.backend,
+      ...(fullRun
+        ? { motorFullRunId: fullRun.id, motorFullRunStage: fullRun.stage }
+        : {}),
+      agents: settings.agents,
+      episodes: settings.episodes,
+      ticksPerEpisode: settings.ticksPerEpisode,
+      tickMs: settings.tickMs,
+      seed: settings.seed,
+      backend: settings.backend,
       arena: motorArena(settings.session, settings.seed),
-      rules: { ...DEFAULT_TRAINING_RULES, noHungerLoss: true, pvp: false, fallDamage: false, drowningDamage: false,
-        difficulty: "peaceful", world: { doMobSpawning: false, doDaylightCycle: false, doWeatherCycle: false } },
+      rules: {
+        ...DEFAULT_TRAINING_RULES,
+        noHungerLoss: true,
+        pvp: false,
+        fallDamage: false,
+        drowningDamage: false,
+        difficulty: "peaceful",
+        world: {
+          doMobSpawning: false,
+          doDaylightCycle: false,
+          doWeatherCycle: false,
+        },
+      },
     });
   }
   app.post("/phase3a/sessions", async (req, reply) => {
-    const { session, agents, episodes, ticksPerEpisode, tickMs, seed, backend } = z.object({
-      session: z.enum(["M0", "M1", "M2", "M3", "M4", "M5", "M6", "M7", "M8"]),
-      agents: z.number().int().min(1).max(config.MAX_AGENTS).default(Math.min(32, config.MAX_AGENTS)),
-      episodes: z.number().int().min(1).max(100000).default(64),
-      ticksPerEpisode: z.number().int().min(1).max(100000).default(80),
-      tickMs: z.number().int().min(20).max(5000).default(100),
-      seed: z.number().int().min(0).max(2147483647).default(42),
-      backend: z.enum(["mineflayer", "fabric"]).default("mineflayer"),
-    }).strict().parse(req.body ?? {});
+    const {
+      session,
+      agents,
+      episodes,
+      ticksPerEpisode,
+      tickMs,
+      seed,
+      backend,
+    } = z
+      .object({
+        session: z.enum(["M0", "M1", "M2", "M3", "M4", "M5", "M6", "M7", "M8"]),
+        agents: z
+          .number()
+          .int()
+          .min(1)
+          .max(config.MAX_AGENTS)
+          .default(Math.min(32, config.MAX_AGENTS)),
+        episodes: z.number().int().min(1).max(100000).default(64),
+        ticksPerEpisode: z.number().int().min(1).max(100000).default(80),
+        tickMs: z.number().int().min(20).max(5000).default(100),
+        seed: z.number().int().min(0).max(2147483647).default(42),
+        backend: z.enum(["mineflayer", "fabric"]).default("mineflayer"),
+      })
+      .strict()
+      .parse(req.body ?? {});
     await prepareMotorWorld();
-    if (!motorSessions.some((entry) => entry.id === session)) throw new Error("Unknown motor session");
+    if (!motorSessions.some((entry) => entry.id === session))
+      throw new Error("Unknown motor session");
     const previous = Number(session.slice(1)) - 1;
-    const source = previous >= 0 ? store.runs(1000).find((run) => run.status === "completed" && run.spec.stage === "motor" && run.spec.motor === `M${previous}`) : undefined;
+    const source =
+      previous >= 0
+        ? store
+            .runs(1000)
+            .find(
+              (run) =>
+                run.status === "completed" &&
+                run.spec.stage === "motor" &&
+                run.spec.motor === `M${previous}`,
+            )
+        : undefined;
     if (session === "M8" && !source)
       throw new Error("Complete an M7 run before testing generalisation on M8");
-    const spec = motorSessionSpec({ session, agents, episodes, ticksPerEpisode, tickMs, seed, backend }, source?.id);
+    const spec = motorSessionSpec(
+      { session, agents, episodes, ticksPerEpisode, tickMs, seed, backend },
+      source?.id,
+    );
     return reply.code(201).send(await enqueue(spec));
   });
   app.post("/phase3a/resume", async (req, reply) => {
-    const { runId, additionalEpisodes } = z.object({
-      runId: z.uuid(),
-      additionalEpisodes: z.number().int().min(1).max(100000),
-    }).strict().parse(req.body);
+    const { runId, additionalEpisodes } = z
+      .object({
+        runId: z.uuid(),
+        additionalEpisodes: z.number().int().min(1).max(100000),
+      })
+      .strict()
+      .parse(req.body);
     const source = store.getRun(runId);
-    if (!source || source.spec.stage !== "motor" || source.spec.component !== "pipeline")
+    if (
+      !source ||
+      source.spec.stage !== "motor" ||
+      source.spec.component !== "pipeline"
+    )
       throw new Error("Select a previous M0-M7 training run");
-    const checkpoint = JSON.parse(await readFile(resolve(config.artifactDir, runId, "checkpoint.json"), "utf8"));
+    const checkpoint = JSON.parse(
+      await readFile(
+        resolve(config.artifactDir, runId, "checkpoint.json"),
+        "utf8",
+      ),
+    );
     const completedEpisodes = checkpoint.resumeState
       ? checkpoint.episode
-      : checkpoint.generation * motorTrialPlan(1, source.spec.agents).episodesPerEvolution;
-    if (!Number.isSafeInteger(completedEpisodes) || completedEpisodes < 0 ||
-        completedEpisodes + additionalEpisodes > 100000)
-      throw new Error("Checkpoint cannot continue for the requested number of episodes");
+      : checkpoint.generation *
+        motorTrialPlan(1, source.spec.agents).episodesPerEvolution;
+    if (
+      !Number.isSafeInteger(completedEpisodes) ||
+      completedEpisodes < 0 ||
+      completedEpisodes + additionalEpisodes > 100000
+    )
+      throw new Error(
+        "Checkpoint cannot continue for the requested number of episodes",
+      );
     const spec = runSchema.parse({
       ...source.spec,
       motorSource: undefined,
@@ -848,43 +1537,586 @@ export function createApp(
       episodes: completedEpisodes + additionalEpisodes,
       startPaused: false,
     });
-    return reply.code(201).send(await enqueue(spec, source.world?.generationId, source.backend?.revision));
+    return reply
+      .code(201)
+      .send(
+        await enqueue(
+          spec,
+          source.world?.generationId,
+          source.backend?.revision,
+        ),
+      );
+  });
+  function combatSessionSpec(
+    settings: {
+      session: import("@mlcraft/core").CombatSession;
+      agents: number;
+      episodes: number;
+      ticksPerEpisode: number;
+      tickMs: number;
+      seed: number;
+    },
+    source?: Run,
+    transfer = false,
+    fullRun?: { id: string; stage: number },
+  ) {
+    const session = combatSession(settings.session);
+    return runSchema.parse({
+      stage: "pvp",
+      combat: settings.session,
+      mode: "minecraft",
+      component: "pipeline",
+      backend: "mineflayer",
+      agents: settings.agents,
+      episodes: settings.episodes,
+      ticksPerEpisode: settings.ticksPerEpisode,
+      tickMs: settings.tickMs,
+      seed: settings.seed,
+      ...(source ? { combatResume: source.id, combatTransfer: transfer } : {}),
+      ...(fullRun
+        ? { combatFullRunId: fullRun.id, combatFullRunStage: fullRun.stage }
+        : {}),
+      arena: combatArena(settings.session, settings.seed),
+      setup: combatSetup(settings.session),
+      rules: {
+        ...DEFAULT_TRAINING_RULES,
+        noHungerLoss: true,
+        pvp: false,
+        creeperBlockDamage: false,
+        fallDamage: false,
+        drowningDamage: false,
+        difficulty: "difficulty" in session ? session.difficulty : "easy",
+        world: {
+          doMobSpawning: false,
+          doDaylightCycle: false,
+          doWeatherCycle: false,
+          mobGriefing: false,
+          doFireTick: false,
+        },
+      },
+    });
+  }
+  app.get("/phase3d/sessions", async () => combatSessions);
+  app.post("/phase3d/sessions", async (req, reply) => {
+    const input = z
+      .object({
+        session: z.enum(
+          combatSessions.map((session) => session.id) as [
+            CombatSession,
+            ...CombatSession[],
+          ],
+        ),
+        agents: z
+          .number()
+          .int()
+          .min(1)
+          .max(config.MAX_AGENTS)
+          .default(Math.min(32, config.MAX_AGENTS)),
+        episodes: z.number().int().min(1).max(100000).default(64),
+        ticksPerEpisode: z.number().int().min(1).max(100000).default(120),
+        tickMs: z.number().int().min(20).max(5000).default(100),
+        seed: z.number().int().min(0).max(2147483647).default(42),
+        sourceRunId: z.uuid().optional(),
+      })
+      .strict()
+      .parse(req.body ?? {});
+    await prepareCombatWorld();
+    const source = input.sourceRunId
+      ? store.getRun(input.sourceRunId)
+      : undefined;
+    if (
+      input.sourceRunId &&
+      (!source ||
+        source.status !== "completed" ||
+        source.spec.stage !== "pvp" ||
+        source.spec.agents !== input.agents ||
+        source.spec.seed !== input.seed)
+    )
+      throw new Error(
+        "Select a completed combat run with the same population size and seed",
+      );
+    const checkpoint = source
+      ? JSON.parse(
+          await readFile(
+            resolve(config.artifactDir, source.id, "checkpoint.json"),
+            "utf8",
+          ),
+        )
+      : undefined;
+    const base = source
+      ? checkpoint.generation *
+        motorTrialPlan(1, input.agents).episodesPerEvolution
+      : 0;
+    if (!Number.isSafeInteger(base) || base + input.episodes > 100000)
+      throw new Error(
+        "Combat population checkpoint cannot continue for that many episodes",
+      );
+    const spec = combatSessionSpec(
+      { ...input, episodes: base + input.episodes },
+      source,
+      !!source,
+    );
+    return reply.code(201).send(await enqueue(spec));
+  });
+  app.post("/phase3d/resume", async (req, reply) => {
+    const { runId, additionalEpisodes } = z
+      .object({
+        runId: z.uuid(),
+        additionalEpisodes: z.number().int().min(1).max(100000),
+      })
+      .strict()
+      .parse(req.body);
+    const source = store.getRun(runId);
+    if (
+      !source ||
+      source.spec.stage !== "pvp" ||
+      source.spec.component !== "pipeline" ||
+      !["completed", "interrupted", "failed", "cancelled"].includes(
+        source.status,
+      )
+    )
+      throw new Error("Select a previous combat training run");
+    let checkpoint: { episode: number };
+    try {
+      checkpoint = JSON.parse(
+        await readFile(
+          resolve(config.artifactDir, runId, "checkpoint.json"),
+          "utf8",
+        ),
+      );
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      const plan = source.spec.combatFullRunId
+        ? store.combatFullRun(source.spec.combatFullRunId)
+        : undefined;
+      const stage = plan?.stages[plan.stageIndex];
+      if (
+        plan &&
+        ["paused", "failed"].includes(plan.status) &&
+        stage?.runIds.at(-1) === source.id &&
+        ["failed", "cancelled"].includes(source.status)
+      ) {
+        plan.retryRequested = true;
+        plan.status = "running";
+        plan.error = undefined;
+        saveCombatFullRun(plan);
+        void advanceCombatFullRuns();
+        return plan;
+      }
+      throw new Error(
+        "This combat run has no population checkpoint. Select a run with completed trials or resume its Combat Full Run.",
+      );
+    }
+    const completed = checkpoint.episode;
+    if (
+      !Number.isSafeInteger(completed) ||
+      completed < 0 ||
+      completed + additionalEpisodes > 100000
+    )
+      throw new Error(
+        "Combat checkpoint cannot continue for the requested episodes",
+      );
+    await prepareCombatWorld();
+    const spec = runSchema.parse({
+      ...source.spec,
+      combatResume: runId,
+      combatSource: undefined,
+      combatTransfer: false,
+      episodes: completed + additionalEpisodes,
+      startPaused: false,
+    });
+    return reply
+      .code(201)
+      .send(
+        await enqueue(
+          spec,
+          source.world?.generationId,
+          source.backend?.revision,
+        ),
+      );
+  });
+  const combatFullStageSchema = z
+    .object({
+      session: z.enum(
+        combatSessions.map((session) => session.id) as [
+          CombatSession,
+          ...CombatSession[],
+        ],
+      ),
+      agents: z.number().int().min(1).max(config.MAX_AGENTS),
+      episodes: z.number().int().min(1).max(100000),
+      ticksPerEpisode: z.number().int().min(1).max(100000),
+      tickMs: z.number().int().min(20).max(5000),
+      seed: z.number().int().min(0).max(2147483647),
+      minWinRate: z.number().min(0).max(1).optional(),
+      maxAttempts: z.number().int().min(1).max(20).optional(),
+    })
+    .strict();
+  function saveCombatFullRun(plan: CombatFullRun) {
+    plan.updatedAt = new Date().toISOString();
+    store.saveCombatFullRun(plan);
+  }
+  let combatFullRunTicking = false;
+  async function advanceCombatFullRuns() {
+    if (combatFullRunTicking || fullRunClosing) return;
+    combatFullRunTicking = true;
+    try {
+      for (const plan of store
+        .combatFullRuns(1000)
+        .filter((entry) => entry.status === "running")) {
+        try {
+          if (plan.stageIndex >= plan.stages.length) {
+            plan.status = "completed";
+            saveCombatFullRun(plan);
+            continue;
+          }
+          const stage = plan.stages[plan.stageIndex];
+          const orphan = store
+            .runs(1000)
+            .find(
+              (run) =>
+                run.spec.combatFullRunId === plan.id &&
+                run.spec.combatFullRunStage === plan.stageIndex &&
+                !stage.runIds.includes(run.id),
+            );
+          if (orphan) {
+            stage.runIds.push(orphan.id);
+            saveCombatFullRun(plan);
+          }
+          const last = stage.runIds.length
+            ? store.getRun(stage.runIds.at(-1)!)
+            : undefined;
+          if (stage.runIds.length && !last)
+            throw new Error("Combat Full Run lost a stage run");
+          if (
+            last &&
+            ["queued", "running", "paused", "pausing"].includes(last.status)
+          )
+            continue;
+          if (scheduler.hasMinecraftWorkers()) continue;
+          if (last?.status === "completed") {
+            let trials: Array<{ trials: number; wins: number }> = [];
+            try {
+              trials = (
+                await readFile(
+                  resolve(config.artifactDir, last.id, "combat-trials.jsonl"),
+                  "utf8",
+                )
+              )
+                .split("\n")
+                .filter(Boolean)
+                .map((line) => JSON.parse(line));
+            } catch (error) {
+              if ((error as NodeJS.ErrnoException).code !== "ENOENT")
+                throw error;
+            }
+            const total = trials.reduce((sum, row) => sum + row.trials, 0);
+            stage.lastWinRate = total
+              ? trials.reduce((sum, row) => sum + row.wins, 0) / total
+              : 0;
+            plan.stageIndex++;
+            if (plan.stageIndex === plan.stages.length)
+              plan.status = "completed";
+            saveCombatFullRun(plan);
+            continue;
+          } else if (last && ["failed", "cancelled"].includes(last.status)) {
+            if (!plan.retryRequested) {
+              plan.status = "paused";
+              plan.error = `${stage.session} run ${last.id.slice(0, 8)} ${last.status}. Resume the Full Run to retry.`;
+              saveCombatFullRun(plan);
+              continue;
+            }
+            plan.retryRequested = false;
+            saveCombatFullRun(plan);
+          } else if (last && last.status !== "interrupted") {
+            throw new Error(`Unexpected combat run state ${last.status}`);
+          }
+          const previousStage = plan.stageIndex
+            ? plan.stages[plan.stageIndex - 1]
+            : undefined;
+          const previous = previousStage?.runIds.length
+            ? store.getRun(previousStage.runIds.at(-1)!)
+            : undefined;
+          if (plan.stageIndex && (!previous || previous.status !== "completed"))
+            throw new Error(
+              "Previous combat stage has no completed population checkpoint",
+            );
+          let source: Run | undefined;
+          let checkpoint: { episode: number; generation: number } | undefined;
+          for (const candidate of [last, previous]) {
+            if (!candidate) continue;
+            try {
+              checkpoint = JSON.parse(
+                await readFile(
+                  resolve(config.artifactDir, candidate.id, "checkpoint.json"),
+                  "utf8",
+                ),
+              );
+              source = candidate;
+              break;
+            } catch (error) {
+              if ((error as NodeJS.ErrnoException).code !== "ENOENT")
+                throw error;
+            }
+          }
+          await prepareCombatWorld();
+          if (
+            fullRunClosing ||
+            store.combatFullRun(plan.id)?.status !== "running"
+          )
+            continue;
+          const transfer = !!source && source.spec.combat !== stage.session;
+          const base = !checkpoint
+            ? 0
+            : transfer
+              ? checkpoint.generation *
+                motorTrialPlan(1, stage.agents).episodesPerEvolution
+              : checkpoint.episode;
+          if (stage.startEpisode === undefined) {
+            if (plan.stageIndex === 0) stage.startEpisode = 0;
+            else {
+              const previousCheckpoint = JSON.parse(await readFile(
+                resolve(config.artifactDir, previous!.id, "checkpoint.json"), "utf8",
+              )) as { generation: number };
+              stage.startEpisode = previousCheckpoint.generation * motorTrialPlan(1, stage.agents).episodesPerEvolution;
+            }
+            saveCombatFullRun(plan);
+          }
+          const targetEpisodes = combatFullRunTargetEpisodes(
+            stage.episodes,
+            base,
+            stage.startEpisode,
+          );
+          const spec = combatSessionSpec(
+            { ...stage, episodes: targetEpisodes },
+            source,
+            transfer,
+            { id: plan.id, stage: plan.stageIndex },
+          );
+          const run = await enqueue(spec);
+          const current = store.combatFullRun(plan.id)!;
+          current.stages[current.stageIndex].runIds.push(run.id);
+          current.error = undefined;
+          saveCombatFullRun(current);
+        } catch (error) {
+          const current = store.combatFullRun(plan.id)!;
+          if (current.status === "running") {
+            current.status = "failed";
+            current.error = (error as Error).message;
+            saveCombatFullRun(current);
+          }
+        }
+      }
+    } finally {
+      combatFullRunTicking = false;
+    }
+  }
+  app.get("/phase3d/full-runs", async () => store.combatFullRuns());
+  app.post("/phase3d/full-runs", async (req, reply) => {
+    const { stages: input } = z
+      .object({
+        stages: z.array(combatFullStageSchema).length(combatSessions.length),
+      })
+      .strict()
+      .parse(req.body);
+    if (
+      input.some(
+        (stage, index) =>
+          stage.session !== combatSessions[index].id ||
+          stage.agents !== input[0].agents ||
+          stage.seed !== input[0].seed,
+      )
+    )
+      throw new Error(
+        `Combat Full Run requires C0-C${combatSessions.length - 1} in order with one population size and seed`,
+      );
+    if (
+      store
+        .combatFullRuns(1000)
+        .some((plan) => ["running", "paused"].includes(plan.status))
+    )
+      throw new Error("Another Combat Full Run is active");
+    if (
+      store.motorTerrainRuns(1000).some((plan) => plan.status === "running") ||
+      store
+        .motorFullRuns(1000)
+        .some((plan) => ["running", "paused"].includes(plan.status))
+    )
+      throw new Error("Stop Phase 3A training before starting combat training");
+    const now = new Date().toISOString();
+    const plan: CombatFullRun = {
+      id: randomUUID(),
+      status: "running",
+      stageIndex: 0,
+      stages: input.map((stage) => ({ ...stage, runIds: [] })),
+      createdAt: now,
+      updatedAt: now,
+    };
+    saveCombatFullRun(plan);
+    void advanceCombatFullRuns();
+    return reply.code(201).send(plan);
+  });
+  app.post("/phase3d/full-runs/:id/:action", async (req) => {
+    const { id, action } = z
+      .object({
+        id: z.uuid(),
+        action: z.enum(["pause", "resume", "cancel", "extend", "extend-current"]),
+      })
+      .parse(req.params);
+    const plan = store.combatFullRun(id);
+    if (!plan) throw new Error("Combat Full Run not found");
+    const stage = plan.stages[plan.stageIndex];
+    const run = stage?.runIds.length
+      ? store.getRun(stage.runIds.at(-1)!)
+      : undefined;
+    if (action === "extend-current") {
+      if (plan.status !== "paused" || !stage || !run || !["cancelled", "failed", "interrupted"].includes(run.status))
+        throw new Error("Pause the current Combat Full Run after its worker stops before adding trials");
+      const { additionalEpisodes } = z.object({ additionalEpisodes: z.number().int().min(1).max(10000) }).strict().parse(req.body);
+      if (stage.startEpisode === undefined) {
+        const previousStage = plan.stages[plan.stageIndex - 1];
+        const previous = previousStage?.runIds.length ? store.getRun(previousStage.runIds.at(-1)!) : undefined;
+        if (plan.stageIndex > 0 && (!previous || previous.status !== "completed"))
+          throw new Error("Previous combat stage checkpoint unavailable");
+        const prior = previous ? JSON.parse(await readFile(resolve(config.artifactDir, previous.id, "checkpoint.json"), "utf8")) as { generation: number } : undefined;
+        stage.startEpisode = prior ? prior.generation * motorTrialPlan(1, stage.agents).episodesPerEvolution : 0;
+      }
+      const checkpoint = JSON.parse(await readFile(resolve(config.artifactDir, run.id, "checkpoint.json"), "utf8")) as { episode: number };
+      combatFullRunTargetEpisodes(stage.episodes + additionalEpisodes, checkpoint.episode, stage.startEpisode);
+      stage.episodes += additionalEpisodes;
+      saveCombatFullRun(plan);
+      return plan;
+    }
+    if (action === "extend") {
+      if (!["running", "paused", "completed"].includes(plan.status))
+        throw new Error(
+          "Finish or resume this Combat Full Run before extending it",
+        );
+      const missing = combatSessions.slice(plan.stages.length);
+      if (!missing.length)
+        throw new Error("Combat Full Run already includes every session");
+      const { stages } = z
+        .object({
+          stages: z.array(combatFullStageSchema).length(missing.length),
+        })
+        .strict()
+        .parse(req.body);
+      const original = plan.stages[0];
+      if (
+        !original ||
+        stages.some(
+          (stage, index) =>
+            stage.session !== missing[index].id ||
+            stage.agents !== original.agents ||
+            stage.seed !== original.seed,
+        )
+      )
+        throw new Error(
+          "New combat stages must follow the curriculum and retain population size and seed",
+        );
+      plan.stages.push(...stages.map((stage) => ({ ...stage, runIds: [] })));
+      if (plan.status === "completed") plan.status = "running";
+      saveCombatFullRun(plan);
+      if (plan.status === "running") void advanceCombatFullRuns();
+      return plan;
+    }
+    if (action === "pause" && plan.status === "running") {
+      plan.status = "paused";
+      if (run && run.status === "running") scheduler.action(run.id, "pause");
+    } else if (
+      action === "resume" &&
+      ["paused", "failed"].includes(plan.status)
+    ) {
+      plan.retryRequested =
+        run?.status === "failed" || run?.status === "cancelled";
+      plan.status = "running";
+      plan.error = undefined;
+      if (run && run.status === "paused") scheduler.action(run.id, "resume");
+    } else if (
+      action === "cancel" &&
+      ["running", "paused"].includes(plan.status)
+    ) {
+      plan.status = "cancelled";
+      if (
+        run &&
+        ["running", "paused", "queued", "pausing"].includes(run.status)
+      )
+        scheduler.action(run.id, "cancel");
+    } else throw new Error(`Cannot ${action} a ${plan.status} Combat Full Run`);
+    saveCombatFullRun(plan);
+    if (action === "resume") void advanceCombatFullRuns();
+    return plan;
   });
   function saveFullRun(plan: MotorFullRun) {
     plan.updatedAt = new Date().toISOString();
     store.saveMotorFullRun(plan);
   }
   async function fullRunOutcome(run: Run, stage: MotorFullRunStage) {
-    const priorCompleted = stage.runIds.slice(0, -1)
+    const priorCompleted = stage.runIds
+      .slice(0, -1)
       .findLastIndex((id) => store.getRun(id)?.status === "completed");
-    const segments = [] as Array<Array<{ episode: number; trials: number; successes: number }>>;
+    const segments = [] as Array<
+      Array<{ episode: number; trials: number; successes: number }>
+    >;
     for (const id of stage.runIds.slice(priorCompleted + 1)) {
-      const body = await readFile(resolve(config.artifactDir, id, "motor-trials.jsonl"), "utf8");
-      segments.push(body.split("\n").filter(Boolean).map((line) => JSON.parse(line)));
+      const body = await readFile(
+        resolve(config.artifactDir, id, "motor-trials.jsonl"),
+        "utf8",
+      );
+      segments.push(
+        body
+          .split("\n")
+          .filter(Boolean)
+          .map((line) => JSON.parse(line)),
+      );
     }
-    const { episodeCount, successRate } = summarizeMotorTrials(segments, stage.episodes);
-    const checkpoint = JSON.parse(await readFile(resolve(config.artifactDir, run.id, "checkpoint.json"), "utf8"));
+    const { episodeCount, successRate } = summarizeMotorTrials(
+      segments,
+      stage.episodes,
+    );
+    const checkpoint = JSON.parse(
+      await readFile(
+        resolve(config.artifactDir, run.id, "checkpoint.json"),
+        "utf8",
+      ),
+    );
     const bestFitness = Number(checkpoint.bestFitness);
     if (!Number.isFinite(bestFitness) || episodeCount !== stage.episodes)
-      throw new Error(`Stage ${stage.session} has no usable trial or fitness results`);
+      throw new Error(
+        `Stage ${stage.session} has no usable trial or fitness results`,
+      );
     return { successRate, bestFitness };
   }
-  async function fullRunContinuation(run: Run, stage: MotorFullRunStage, interrupted: boolean) {
+  async function fullRunContinuation(
+    run: Run,
+    stage: MotorFullRunStage,
+    interrupted: boolean,
+  ) {
     if (stage.session === "M8") return undefined;
     try {
-      const checkpoint = JSON.parse(await readFile(resolve(config.artifactDir, run.id, "checkpoint.json"), "utf8"));
+      const checkpoint = JSON.parse(
+        await readFile(
+          resolve(config.artifactDir, run.id, "checkpoint.json"),
+          "utf8",
+        ),
+      );
       const completed = checkpoint.resumeState
         ? checkpoint.episode
-        : checkpoint.generation * motorTrialPlan(1, stage.agents).episodesPerEvolution;
+        : checkpoint.generation *
+          motorTrialPlan(1, stage.agents).episodesPerEvolution;
       if (!Number.isSafeInteger(completed) || completed < 0)
         throw new Error("Checkpoint has no recoverable episode");
       const target = interrupted
         ? Math.max(run.spec.episodes, completed + 1)
         : completed + stage.episodes;
-      if (target > 100000) throw new Error("Full Run exceeds the 100,000 episode limit");
+      if (target > 100000)
+        throw new Error("Full Run exceeds the 100,000 episode limit");
       return runSchema.parse({
-        ...run.spec, motorSource: undefined, motorResume: run.id,
-        episodes: target, startPaused: false,
+        ...run.spec,
+        motorSource: undefined,
+        motorResume: run.id,
+        episodes: target,
+        startPaused: false,
       });
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
@@ -897,7 +2129,9 @@ export function createApp(
     if (fullRunTicking || fullRunClosing) return;
     fullRunTicking = true;
     try {
-      for (const plan of store.motorFullRuns(1000).filter((entry) => entry.status === "running")) {
+      for (const plan of store
+        .motorFullRuns(1000)
+        .filter((entry) => entry.status === "running")) {
         try {
           if (plan.stageIndex >= plan.stages.length) {
             plan.status = "completed";
@@ -905,19 +2139,30 @@ export function createApp(
             continue;
           }
           const stage = plan.stages[plan.stageIndex];
-          const orphan = store.runs(1000).find((run) =>
-            run.spec.motorFullRunId === plan.id &&
-            run.spec.motorFullRunStage === plan.stageIndex &&
-            !stage.runIds.includes(run.id));
+          const orphan = store
+            .runs(1000)
+            .find(
+              (run) =>
+                run.spec.motorFullRunId === plan.id &&
+                run.spec.motorFullRunStage === plan.stageIndex &&
+                !stage.runIds.includes(run.id),
+            );
           if (orphan) {
             stage.runIds.push(orphan.id);
             saveFullRun(plan);
           }
           const last = stage.runIds.length
-            ? store.getRun(stage.runIds.at(-1)!) : undefined;
+            ? store.getRun(stage.runIds.at(-1)!)
+            : undefined;
           if (stage.runIds.length && !last)
-            throw new Error(`Full Run stage ${stage.session} lost its recorded run`);
-          if (last && ["queued", "running", "paused", "pausing"].includes(last.status)) continue;
+            throw new Error(
+              `Full Run stage ${stage.session} lost its recorded run`,
+            );
+          if (
+            last &&
+            ["queued", "running", "paused", "pausing"].includes(last.status)
+          )
+            continue;
           if (scheduler.hasMinecraftWorkers()) continue;
           if (last?.status === "completed") {
             plan.retryRequested = false;
@@ -925,23 +2170,37 @@ export function createApp(
             stage.lastSuccessRate = outcome.successRate;
             stage.lastBestFitness = outcome.bestFitness;
             saveFullRun(plan);
-            if (outcome.successRate >= stage.minSuccessRate &&
-                (stage.minBestFitness === undefined || outcome.bestFitness >= stage.minBestFitness)) {
+            if (
+              outcome.successRate >= stage.minSuccessRate &&
+              (stage.minBestFitness === undefined ||
+                outcome.bestFitness >= stage.minBestFitness)
+            ) {
               plan.stageIndex++;
-              if (plan.stageIndex === plan.stages.length) plan.status = "completed";
+              if (plan.stageIndex === plan.stages.length)
+                plan.status = "completed";
               saveFullRun(plan);
               continue;
             }
-            const completedAttempts = stage.runIds.filter((id) => store.getRun(id)?.status === "completed").length;
+            const completedAttempts = stage.runIds.filter(
+              (id) => store.getRun(id)?.status === "completed",
+            ).length;
             if (completedAttempts >= stage.maxAttempts) {
               plan.status = "failed";
               plan.error = `${stage.session} did not meet its conditions after ${completedAttempts} attempt${completedAttempts === 1 ? "" : "s"}: success ${(outcome.successRate * 100).toFixed(1)}%, best fitness ${outcome.bestFitness.toFixed(2)}`;
               saveFullRun(plan);
               continue;
             }
-          } else if (last && last.status !== "interrupted" && last.status !== "failed" && last.status !== "cancelled") {
+          } else if (
+            last &&
+            last.status !== "interrupted" &&
+            last.status !== "failed" &&
+            last.status !== "cancelled"
+          ) {
             throw new Error(`Unexpected run state ${last.status}`);
-          } else if (last?.status === "failed" || last?.status === "cancelled") {
+          } else if (
+            last?.status === "failed" ||
+            last?.status === "cancelled"
+          ) {
             if (!plan.retryRequested) {
               plan.status = "paused";
               plan.error = `${stage.session} run ${last.id.slice(0, 8)} ${last.status}. Resume the Full Run to retry this stage.`;
@@ -952,15 +2211,31 @@ export function createApp(
             saveFullRun(plan);
           }
           const previous = plan.stageIndex
-            ? plan.stages[plan.stageIndex - 1].runIds.at(-1) : undefined;
-          if (plan.stageIndex && (!previous || store.getRun(previous)?.status !== "completed"))
-            throw new Error(`Previous stage checkpoint for ${stage.session} is unavailable`);
+            ? plan.stages[plan.stageIndex - 1].runIds.at(-1)
+            : undefined;
+          if (
+            plan.stageIndex &&
+            (!previous || store.getRun(previous)?.status !== "completed")
+          )
+            throw new Error(
+              `Previous stage checkpoint for ${stage.session} is unavailable`,
+            );
           await prepareMotorWorld();
           if (fullRunClosing) return;
           const spec = last
-            ? (await fullRunContinuation(last, stage, last.status !== "completed"))
-              ?? motorSessionSpec(stage, previous, { id: plan.id, stage: plan.stageIndex })
-            : motorSessionSpec(stage, previous, { id: plan.id, stage: plan.stageIndex });
+            ? ((await fullRunContinuation(
+                last,
+                stage,
+                last.status !== "completed",
+              )) ??
+              motorSessionSpec(stage, previous, {
+                id: plan.id,
+                stage: plan.stageIndex,
+              }))
+            : motorSessionSpec(stage, previous, {
+                id: plan.id,
+                stage: plan.stageIndex,
+              });
           const run = await enqueue(spec);
           stage.runIds.push(run.id);
           plan.error = undefined;
@@ -978,30 +2253,58 @@ export function createApp(
   app.get("/phase3a/full-runs", async () => store.motorFullRuns());
   app.post("/phase3a/full-runs", async (req, reply) => {
     const { stages: configured } = fullRunRequestSchema.parse(req.body);
-    if (store.motorFullRuns(1000).some((plan) => ["running", "paused"].includes(plan.status)))
+    if (store.motorTerrainRuns(1000).some((plan) => plan.status === "running"))
+      throw new Error(
+        "Stop natural terrain training before starting a Full Run",
+      );
+    if (
+      store
+        .motorFullRuns(1000)
+        .some((plan) => ["running", "paused"].includes(plan.status))
+    )
       throw new Error("Finish or stop the existing Phase 3A Full Run first");
-    if (store.runs(1000).some((run) => run.spec.mode === "minecraft" &&
-        ["queued", "running", "paused", "pausing"].includes(run.status)))
-      throw new Error("Finish or cancel active Minecraft runs before starting a Full Run");
+    if (
+      store
+        .runs(1000)
+        .some(
+          (run) =>
+            run.spec.mode === "minecraft" &&
+            ["queued", "running", "paused", "pausing"].includes(run.status),
+        )
+    )
+      throw new Error(
+        "Finish or cancel active Minecraft runs before starting a Full Run",
+      );
     configured.forEach((stage) => {
       validateArenaRun(motorSessionSpec(stage));
-      if (stage.backend === "fabric" && stage.agents > config.MAX_RENDER_CLIENTS)
-        throw new Error(`${stage.session} exceeds the rendered-client limit ${config.MAX_RENDER_CLIENTS}`);
+      if (
+        stage.backend === "fabric" &&
+        stage.agents > config.MAX_RENDER_CLIENTS
+      )
+        throw new Error(
+          `${stage.session} exceeds the rendered-client limit ${config.MAX_RENDER_CLIENTS}`,
+        );
     });
     const now = new Date().toISOString();
     const plan: MotorFullRun = {
-      id: randomUUID(), status: "running", stageIndex: 0,
+      id: randomUUID(),
+      status: "running",
+      stageIndex: 0,
       stages: configured.map((stage) => ({ ...stage, runIds: [] })),
-      createdAt: now, updatedAt: now,
+      createdAt: now,
+      updatedAt: now,
     };
     store.saveMotorFullRun(plan);
     void advanceFullRuns();
     return reply.code(201).send(plan);
   });
   app.post("/phase3a/full-runs/:id/:action", async (req) => {
-    const { id, action } = z.object({
-      id: z.uuid(), action: z.enum(["pause", "resume", "cancel"]),
-    }).parse(req.params);
+    const { id, action } = z
+      .object({
+        id: z.uuid(),
+        action: z.enum(["pause", "resume", "cancel"]),
+      })
+      .parse(req.params);
     const plan = store.motorFullRun(id);
     if (!plan) throw new Error("Full Run not found");
     if (action === "pause" && plan.status === "running") {
@@ -1011,14 +2314,25 @@ export function createApp(
       plan.status = "running";
       plan.error = undefined;
       const stage = plan.stages[plan.stageIndex];
-      const last = stage?.runIds.length ? store.getRun(stage.runIds.at(-1)!) : undefined;
-      plan.retryRequested = last?.status === "failed" || last?.status === "cancelled";
-    } else if (action === "cancel" && ["running", "paused"].includes(plan.status)) {
+      const last = stage?.runIds.length
+        ? store.getRun(stage.runIds.at(-1)!)
+        : undefined;
+      plan.retryRequested =
+        last?.status === "failed" || last?.status === "cancelled";
+    } else if (
+      action === "cancel" &&
+      ["running", "paused"].includes(plan.status)
+    ) {
       plan.status = "cancelled";
       saveFullRun(plan);
       const stage = plan.stages[plan.stageIndex];
-      const run = stage?.runIds.length ? store.getRun(stage.runIds.at(-1)!) : undefined;
-      if (run && ["queued", "running", "paused", "pausing"].includes(run.status)) {
+      const run = stage?.runIds.length
+        ? store.getRun(stage.runIds.at(-1)!)
+        : undefined;
+      if (
+        run &&
+        ["queued", "running", "paused", "pausing"].includes(run.status)
+      ) {
         try {
           scheduler.action(run.id, "cancel");
         } catch (error) {
@@ -1029,6 +2343,304 @@ export function createApp(
     } else throw new Error(`Cannot ${action} a ${plan.status} Full Run`);
     saveFullRun(plan);
     if (action === "resume") void advanceFullRuns();
+    return plan;
+  });
+  function saveTerrainPlan(plan: MotorTerrainRun) {
+    plan.updatedAt = new Date().toISOString();
+    store.saveMotorTerrainRun(plan);
+  }
+  let terrainTicking = false;
+  async function advanceTerrainRuns() {
+    if (terrainTicking || fullRunClosing) return;
+    terrainTicking = true;
+    try {
+      for (const plan of store
+        .motorTerrainRuns(1000)
+        .filter((entry) => entry.status === "running")) {
+        try {
+          const last = plan.runIds.length
+            ? store.getRun(plan.runIds.at(-1)!)
+            : undefined;
+          if (plan.runIds.length && !last)
+            throw new Error("Natural training segment is missing");
+          if (
+            last &&
+            ["queued", "running", "paused", "pausing"].includes(last.status)
+          )
+            continue;
+          if (
+            last &&
+            !["completed", "interrupted", "cancelled", "failed"].includes(
+              last.status,
+            )
+          )
+            throw new Error(
+              `Natural training segment ${last.id.slice(0, 8)} ${last.status}`,
+            );
+          if (
+            scheduler.hasMinecraftWorkers() ||
+            store.queued().some((run) => run.spec.mode === "minecraft")
+          )
+            continue;
+          let source: Run | undefined;
+          let checkpoint:
+            | { resumeState?: unknown; episode: number; generation: number }
+            | undefined;
+          for (const id of [...plan.runIds]
+            .reverse()
+            .concat(plan.sourceRunId)) {
+            const candidate = store.getRun(id);
+            if (!candidate) continue;
+            try {
+              checkpoint = JSON.parse(
+                await readFile(
+                  resolve(config.artifactDir, id, "checkpoint.json"),
+                  "utf8",
+                ),
+              );
+              source = candidate;
+              break;
+            } catch (error) {
+              if ((error as NodeJS.ErrnoException).code !== "ENOENT")
+                throw error;
+            }
+          }
+          if (!source || !checkpoint)
+            throw new Error("No saved M7 population checkpoint is available");
+          const completed = checkpoint.resumeState
+            ? checkpoint.episode
+            : checkpoint.generation *
+              motorTrialPlan(1, source.spec.agents).episodesPerEvolution;
+          if (
+            !Number.isSafeInteger(completed) ||
+            completed < 0 ||
+            completed + plan.episodesPerWorld > 1000000000
+          )
+            throw new Error("Population episode counter has reached its limit");
+          if (server.state.status === "running") await server.stop();
+          if (
+            store.motorTerrainRun(plan.id)?.status !== "running" ||
+            fullRunClosing
+          )
+            continue;
+          const worldSeed = String(randomInt(0, 2147483647));
+          const settings = {
+            type: "survival" as const,
+            seed: worldSeed,
+            difficulty: "peaceful" as const,
+            gamemode: "survival" as const,
+            structures: true,
+            flat: {
+              biome: "minecraft:plains",
+              layers: [
+                { block: "minecraft:bedrock", height: 1 },
+                { block: "minecraft:dirt", height: 2 },
+                { block: "minecraft:grass_block", height: 1 },
+              ],
+            },
+          };
+          const catalog = await worlds.catalog();
+          const profile = catalog.profiles.find(
+            (entry) =>
+              entry.name.startsWith("MLCraft Natural Terrain") &&
+              entry.generations.length < 500,
+          );
+          if (profile)
+            await worlds.reset(
+              profile.id,
+              profile.generations.at(-1)!.id,
+              false,
+              settings,
+            );
+          else
+            await worlds.create({
+              name: `MLCraft Natural Terrain ${plan.id.slice(0, 8)} ${catalog.profiles.length + 1}`,
+              settings,
+            });
+          await server.start();
+          const deadline = Date.now() + 180000;
+          while (
+            server.state.status !== "running" ||
+            !server.state.setupReady ||
+            !server.state.rulesReady
+          ) {
+            if (server.state.status === "failed" || Date.now() > deadline)
+              throw new Error("Generated survival world did not become ready");
+            await new Promise((resolve) => setTimeout(resolve, 500));
+          }
+          if (
+            store.motorTerrainRun(plan.id)?.status !== "running" ||
+            fullRunClosing
+          )
+            continue;
+          const spec = runSchema.parse({
+            ...source.spec,
+            motor: "M7",
+            component: "pipeline",
+            motorSource: undefined,
+            motorResume: source.id,
+            motorFullRunId: undefined,
+            motorFullRunStage: undefined,
+            motorTerrain: {
+              planId: plan.id,
+              worldSeed,
+              minDistance: plan.minDistance,
+              maxDistance: plan.maxDistance,
+              spreadRadius: Math.max(
+                32,
+                Math.min(
+                  2048,
+                  Math.round((plan.spreadRadius * randomInt(70, 131)) / 100),
+                ),
+              ),
+            },
+            arena: undefined,
+            episodes: completed + plan.episodesPerWorld,
+            ticksPerEpisode: Math.max(300, source.spec.ticksPerEpisode),
+            startPaused: false,
+          });
+          const run = await enqueue(spec);
+          const currentPlan = store.motorTerrainRun(plan.id)!;
+          currentPlan.runIds.push(run.id);
+          currentPlan.error = undefined;
+          saveTerrainPlan(currentPlan);
+          if (currentPlan.status !== "running")
+            scheduler.action(run.id, "cancel");
+        } catch (error) {
+          const currentPlan = store.motorTerrainRun(plan.id)!;
+          if (currentPlan.status === "running") {
+            currentPlan.status = "failed";
+            currentPlan.error = (error as Error).message;
+            saveTerrainPlan(currentPlan);
+          }
+        }
+      }
+    } finally {
+      terrainTicking = false;
+    }
+  }
+  app.get("/phase3a/terrain-runs", async () => store.motorTerrainRuns());
+  app.post("/phase3a/terrain-runs", async (req, reply) => {
+    const input = z
+      .object({
+        fullRunId: z.uuid(),
+        episodesPerWorld: z.number().int().min(3).max(300).default(12),
+        minDistance: z.number().int().min(4).max(256).default(12),
+        maxDistance: z.number().int().min(4).max(256).default(80),
+        spreadRadius: z.number().int().min(32).max(2048).default(128),
+      })
+      .strict()
+      .parse(req.body ?? {});
+    if (input.minDistance > input.maxDistance)
+      throw new Error("Minimum target distance exceeds maximum distance");
+    if (input.episodesPerWorld % 3 !== 0)
+      throw new Error("Episodes per world must be a multiple of three trials");
+    const fullRun = store.motorFullRun(input.fullRunId);
+    if (fullRun?.status !== "completed")
+      throw new Error("Select a completed Full Run");
+    const sourceRunId = fullRun.stages[7]?.runIds.at(-1);
+    const source = sourceRunId ? store.getRun(sourceRunId) : undefined;
+    if (!source || source.status !== "completed" || source.spec.motor !== "M7")
+      throw new Error("Completed Full Run has no usable M7 population");
+    if (
+      store
+        .motorTerrainRuns(1000)
+        .some((entry) => entry.status === "running") ||
+      store
+        .motorFullRuns(1000)
+        .some((entry) => ["running", "paused"].includes(entry.status)) ||
+      store
+        .runs(1000)
+        .some(
+          (run) =>
+            run.spec.mode === "minecraft" &&
+            ["queued", "running", "paused", "pausing"].includes(run.status),
+        )
+    )
+      throw new Error(
+        "Finish or stop active training before starting natural terrain training",
+      );
+    const checkpoint = JSON.parse(
+      await readFile(
+        resolve(config.artifactDir, source.id, "checkpoint.json"),
+        "utf8",
+      ),
+    );
+    if (
+      checkpoint.kind !== "neat-rl" ||
+      checkpoint.session !== "M7" ||
+      !Array.isArray(checkpoint.population) ||
+      !checkpoint.population.length
+    )
+      throw new Error("M7 checkpoint has no complete NEAT population");
+    if (
+      store
+        .motorTerrainRuns(1000)
+        .some((entry) => entry.status === "running") ||
+      store
+        .motorFullRuns(1000)
+        .some((entry) => ["running", "paused"].includes(entry.status)) ||
+      scheduler.hasMinecraftWorkers() ||
+      store.queued().some((run) => run.spec.mode === "minecraft")
+    )
+      throw new Error(
+        "Another training run started while the M7 checkpoint was loading",
+      );
+    const now = new Date().toISOString();
+    const plan: MotorTerrainRun = {
+      id: randomUUID(),
+      sourceFullRunId: fullRun.id,
+      sourceRunId: source.id,
+      status: "running",
+      runIds: [],
+      episodesPerWorld: input.episodesPerWorld,
+      minDistance: input.minDistance,
+      maxDistance: input.maxDistance,
+      spreadRadius: input.spreadRadius,
+      createdAt: now,
+      updatedAt: now,
+    };
+    saveTerrainPlan(plan);
+    void advanceTerrainRuns();
+    return reply.code(201).send(plan);
+  });
+  app.post("/phase3a/terrain-runs/:id/stop", async (req) => {
+    const { id } = z.object({ id: z.uuid() }).parse(req.params);
+    const plan = store.motorTerrainRun(id);
+    if (!plan || plan.status !== "running")
+      throw new Error("Natural training is not running");
+    plan.status = "stopped";
+    saveTerrainPlan(plan);
+    const last = plan.runIds.length
+      ? store.getRun(plan.runIds.at(-1)!)
+      : undefined;
+    if (
+      last &&
+      ["queued", "running", "paused", "pausing"].includes(last.status)
+    )
+      scheduler.action(last.id, "cancel");
+    return plan;
+  });
+  app.post("/phase3a/terrain-runs/:id/resume", async (req) => {
+    const { id } = z.object({ id: z.uuid() }).parse(req.params);
+    const plan = store.motorTerrainRun(id);
+    if (!plan || !["stopped", "failed"].includes(plan.status))
+      throw new Error("Select a stopped natural training plan");
+    if (
+      store
+        .motorTerrainRuns(1000)
+        .some((entry) => entry.status === "running") ||
+      store
+        .motorFullRuns(1000)
+        .some((entry) => ["running", "paused"].includes(entry.status))
+    )
+      throw new Error(
+        "Stop other Phase 3A training before resuming natural training",
+      );
+    plan.status = "running";
+    plan.error = undefined;
+    saveTerrainPlan(plan);
+    void advanceTerrainRuns();
     return plan;
   });
   app.post("/runs/:id/playback", async (req) => {
@@ -1084,6 +2696,9 @@ export function createApp(
           "episodes.jsonl",
           "evolution.jsonl",
           "motor-trials.jsonl",
+          "combat-trials.jsonl",
+          "interaction-trials.jsonl",
+          "skill-results.jsonl",
           "checkpoint.json",
           "models.json",
           "inputs.jsonl",
@@ -1193,10 +2808,17 @@ export function createApp(
   }, 2000);
   const hud = setInterval(() => server.syncViewerHud(), 1000);
   const fullRunTimer = setInterval(() => void advanceFullRuns(), 2000);
+  const combatFullRunTimer = setInterval(
+    () => void advanceCombatFullRuns(),
+    2000,
+  );
+  const terrainTimer = setInterval(() => void advanceTerrainRuns(), 2000);
   const prune = setInterval(() => store.prune(), 60000);
   app.addHook("onClose", async () => {
     fullRunClosing = true;
     clearInterval(fullRunTimer);
+    clearInterval(combatFullRunTimer);
+    clearInterval(terrainTimer);
     clearInterval(hud);
     clearInterval(sample);
     clearInterval(prune);

@@ -197,13 +197,13 @@ export const trainingStages = [
     name: "Interaction skills",
     icon: "iron_pickaxe",
     description:
-      "Train mining, eating, crafting and inventory or container interactions in isolation.",
+      "Evaluate targeting and mining baselines in isolated Minecraft cells, with structured skill outcomes.",
     inputs:
-      "Requested interaction, inventory, accessible targets and relevant player state.",
+      "Requested aim or mine action, target block and position, inventory tools and player pose.",
     outputs:
-      "Player action sequences and skill outcomes for resource and item interactions.",
+      "Normal look, equip and dig controls plus a structured SkillResult with status, reason and state delta.",
     evaluation:
-      "Interaction success, inventory changes, hunger recovery and completion time.",
+      "Target acquisition, correct-block mining, tool choice, success and failure reasons, and completion time.",
   },
   {
     id: "phase3d",
@@ -212,12 +212,12 @@ export const trainingStages = [
     name: "Combat",
     icon: "iron_sword",
     description:
-      "Learn isolated combat skills for engaging threats and retreating when needed.",
+      "Train C0–C35 combat skills against passive, neutral, melee, ranged, explosive and mixed mobs with varied weapons and armor.",
     inputs:
       "Observed opponents, health, equipment, terrain and a combat objective.",
     outputs: "Attack, defence and flee skills through normal player actions.",
     evaluation:
-      "Survival, damage dealt and received, encounter success and resource cost.",
+      "Encounter wins, kills, damage taken, population reward and evolved NEAT fitness.",
   },
   {
     id: "phase4a",

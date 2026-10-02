@@ -56,12 +56,40 @@ export function isViewerUsername(
 export type StageId =
   | "movement"
   | "motor"
+  | "interaction"
   | "wood_collection"
   | "block_collection"
   | "survival"
   | "pvp";
 export type MotorSession =
   "M0" | "M1" | "M2" | "M3" | "M4" | "M5" | "M6" | "M7" | "M8";
+export type CombatSession = import("./combat.js").CombatSession;
+export type InteractionSession = import("./interaction.js").InteractionSession;
+export interface CombatFullRunStage {
+  session: CombatSession;
+  agents: number;
+  episodes: number;
+  ticksPerEpisode: number;
+  tickMs: number;
+  seed: number;
+  /** Legacy plan fields retained for previously saved Full Runs. */
+  minWinRate?: number;
+  maxAttempts?: number;
+  runIds: string[];
+  /** Absolute episode number at which this stage begins in the transferred population. */
+  startEpisode?: number;
+  lastWinRate?: number;
+}
+export interface CombatFullRun {
+  id: string;
+  status: "running" | "paused" | "completed" | "failed" | "cancelled";
+  stageIndex: number;
+  stages: CombatFullRunStage[];
+  error?: string;
+  retryRequested?: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
 export interface MotorFullRunStage {
   session: MotorSession;
   agents: number;
@@ -87,6 +115,20 @@ export interface MotorFullRun {
   createdAt: string;
   updatedAt: string;
 }
+export interface MotorTerrainRun {
+  id: string;
+  sourceFullRunId: string;
+  sourceRunId: string;
+  status: "running" | "stopped" | "failed";
+  runIds: string[];
+  episodesPerWorld: number;
+  minDistance: number;
+  maxDistance: number;
+  spreadRadius: number;
+  error?: string;
+  createdAt: string;
+  updatedAt: string;
+}
 export type Component = "pipeline" | "environment" | "evaluation";
 export interface RunSpec {
   /** Keep one connected agent idle for Phase 0 inspection. */
@@ -97,11 +139,27 @@ export interface RunSpec {
   inputs?: import("./inputs.js").AgentInputConfig;
   stage: StageId;
   motor?: MotorSession;
+  combat?: CombatSession;
+  interaction?: InteractionSession;
+  combatSource?: string;
+  combatResume?: string;
+  /** Carry the complete population to the next combat curriculum session. */
+  combatTransfer?: boolean;
+  combatFullRunId?: string;
+  combatFullRunStage?: number;
   motorSource?: string;
   /** Continue the complete NEAT state from a terminal run checkpoint. */
   motorResume?: string;
   motorFullRunId?: string;
   motorFullRunStage?: number;
+  /** Natural-world continuation, preserving a complete M7 NEAT population. */
+  motorTerrain?: {
+    planId: string;
+    worldSeed: string;
+    minDistance: number;
+    maxDistance: number;
+    spreadRadius: number;
+  };
   mode: Mode;
   component: Component;
   agents: number;
@@ -177,8 +235,8 @@ export interface ArenaBlueprint {
   }[];
   entities: {
     position: ArenaPoint;
-    type:
-      "cow" | "pig" | "sheep" | "chicken" | "zombie" | "skeleton" | "spider";
+    /** Validated against the versioned arena mob whitelist at the control boundary. */
+    type: string;
     count: number;
   }[];
 }
@@ -350,12 +408,15 @@ export interface AgentState {
   food?: number;
   inventory?: Record<string, number>;
   position?: ArenaPoint;
+  motorSpawn?: ArenaPoint;
+  motorTarget?: ArenaPoint;
   targetReached?: boolean;
   targetSteps?: number;
+  combatKills?: number;
   error?: string;
 }
 export interface Metric {
-  kind?: "evolution" | "motor-trial";
+  kind?: "evolution" | "motor-trial" | "combat-trial" | "interaction-trial";
   at: number;
   runId: string;
   episode: number;
@@ -369,10 +430,14 @@ export interface Metric {
     bestFitness: number;
     generationBestFitness: number;
     population: number;
+    bestWins?: number;
+    generationBestWins?: number;
+    heldoutPopulationMeanReward?: number;
     speciesDetails?: {
       id: number;
       size: number;
       bestFitness: number;
+      bestWins?: number;
       offspring: number;
       stagnant: boolean;
     }[];
@@ -382,6 +447,22 @@ export interface Metric {
     successes: number;
     successRate: number;
     meanSuccessSteps: number | null;
+  };
+  combat?: {
+    trials: number;
+    wins: number;
+    winRate: number;
+    meanWinSteps: number | null;
+    kills: number;
+    heldOut?: boolean;
+  };
+  interaction?: {
+    trials: number;
+    successes: number;
+    successRate: number;
+    meanDurationMs: number;
+    failures: Record<string, number>;
+    heldOut: boolean;
   };
 }
 export interface LogEntry {
@@ -441,7 +522,7 @@ export interface StageDefinition {
   id: StageId;
   name: string;
   description: string;
-  policy: "placeholder" | "neat-rl";
+  policy: "placeholder" | "neat-rl" | "deterministic";
   readiness: string;
 }
 export const stages: StageDefinition[] = [
@@ -485,10 +566,16 @@ export const stages: StageDefinition[] = [
   {
     id: "pvp",
     name: "Combat",
-    description:
-      "Health observations; add arenas, opponents and combat rewards.",
-    policy: "placeholder",
-    readiness: "Environment scaffold",
+    description: "Mob combat curriculum with evolved attack and defence controls.",
+    policy: "neat-rl",
+    readiness: "NEAT training in isolated Minecraft combat arenas",
+  },
+  {
+    id: "interaction",
+    name: "Interaction skills",
+    description: "Requested targeting and mining skills with structured outcomes.",
+    policy: "deterministic",
+    readiness: "Deterministic player-control baselines in isolated Minecraft arenas",
   },
 ];
 export interface Observation {
@@ -498,6 +585,30 @@ export interface Observation {
   food: number;
   inventory: Record<string, number>;
   tick: number;
+  combat?: {
+    targets: {
+      id: number;
+      type: string;
+      position: ArenaPoint;
+      velocity?: ArenaPoint;
+      health?: number;
+      onFire?: boolean;
+      recentlyHurt?: boolean;
+      creeperFuse?: number;
+      creeperCharged?: boolean;
+      creeperIgnited?: boolean;
+    }[];
+    projectiles?: { position: ArenaPoint; velocity: ArenaPoint }[];
+    selfOnFire?: boolean;
+    poisoned?: boolean;
+    slowed?: boolean;
+    withered?: boolean;
+    shieldRaised?: boolean;
+    attackReady: number;
+    confirmedHits?: number;
+    itemUseTicks?: number;
+    weaponLoaded?: boolean;
+  };
 }
 export interface Action {
   controls?: Partial<
@@ -508,6 +619,9 @@ export interface Action {
   >;
   look?: { yaw: number; pitch: number };
   dig?: boolean;
+  attack?: boolean;
+  block?: boolean;
+  use?: boolean;
 }
 export interface Transition {
   observation: import("./inputs.js").PolicyObservation;
@@ -515,6 +629,8 @@ export interface Transition {
   reward: number;
   nextObservation: import("./inputs.js").PolicyObservation;
   done: boolean;
+  /** True only for a server verified combat win while the agent survived. */
+  won?: boolean;
 }
 export interface Policy {
   inspectModel?(): ModelInspection | Promise<ModelInspection>;
@@ -529,6 +645,8 @@ export interface Trainer {
   checkpoint(): Promise<Record<string, unknown>>;
 }
 export interface Environment {
+  /** Execute a requested Phase 3C skill through normal client controls. */
+  executeSkill?(request: import("./interaction.js").SkillRequest): Promise<import("./interaction.js").SkillResult>;
   /** Administrative live camera, independent of policy channel selection. */
   feed?(): Promise<import("./inputs.js").CaptureFrame | undefined>;
   /** Local client audio output control, independent of policy inputs. */
@@ -573,9 +691,22 @@ export type WorkerMessage =
       error?: string;
     }
   | { type: "timing"; episode: number; timing: TrainingTiming }
-  | { type: "arena-build"; requestId: string }
+  | { type: "arena-build"; requestId: string; arena?: ArenaSpec }
+  | { type: "arena-status"; requestId: string }
   | { type: "arena-spawn"; requestId: string; username: string }
   | { type: "agent-setup"; requestId: string; username: string }
+  | {
+      type: "natural-spawn";
+      requestId: string;
+      username: string;
+      radius: number;
+    }
+  | {
+      type: "natural-target";
+      requestId: string;
+      username: string;
+      target: ArenaPoint;
+    }
   | { type: "rules-apply"; requestId: string }
   | { type: "agents"; agents: AgentState[] }
   | { type: "metric"; metric: Metric; agents: AgentState[] }

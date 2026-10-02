@@ -47,6 +47,8 @@ import { MinecraftIcon } from "../components/minecraft-icon";
 import { AgentDetails } from "../components/agent-details";
 import { AgentMinimap } from "../components/agent-minimap";
 import { MotorTraining } from "../components/motor-training";
+import { CombatTraining } from "../components/combat-training";
+import { InteractionTraining } from "../components/interaction-training";
 import { trainingPhases } from "../lib/training-stages";
 import type { Snapshot, RunSpec, Run, StageId, LogEntry } from "@mlcraft/core";
 type View =
@@ -70,7 +72,7 @@ export default function Dashboard() {
   const [modal, setModal] = useState(false);
   const [selected, setSelected] = useState<string>("");
   const [trainingStage, setTrainingStage] = useState<TrainingStageId>();
-  const [completedPhases, setCompletedPhases] = useState<number[]>([]);
+  const [completedStages, setCompletedStages] = useState<TrainingStageId[]>([]);
   const [minimapOpen, setMinimapOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [previewBackend, setPreviewBackend] = useState<"fabric" | "mineflayer">(
@@ -113,30 +115,61 @@ export default function Dashboard() {
   }, [view, trainingStage]);
   useEffect(() => {
     try {
-      const saved = JSON.parse(
+      const savedStages = localStorage.getItem("mlcraft-training-stages");
+      if (savedStages !== null) {
+        const saved = JSON.parse(savedStages);
+        if (Array.isArray(saved))
+          setCompletedStages(
+            trainingStages
+              .filter((stage) => saved.includes(stage.id))
+              .map((stage) => stage.id),
+          );
+        return;
+      }
+      const savedPhases = JSON.parse(
         localStorage.getItem("mlcraft-training-phases") ??
           localStorage.getItem("rlcraft-training-phases") ??
           "[]",
       );
-      if (Array.isArray(saved))
-        setCompletedPhases(
-          saved.filter(
-            (phase) =>
-              Number.isInteger(phase) &&
-              phase >= 0 &&
-              phase < trainingPhases.length,
-          ),
+      if (Array.isArray(savedPhases))
+        setCompletedStages(
+          trainingStages
+            .filter((stage) => savedPhases.includes(stage.phase))
+            .map((stage) => stage.id),
         );
     } catch {}
   }, []);
+  const completedPhases = trainingPhases
+    .map((_, phase) => phase)
+    .filter((phase) =>
+      trainingStages
+        .filter((stage) => stage.phase === phase)
+        .every((stage) => completedStages.includes(stage.id)),
+    );
+  function saveCompletedStages(next: TrainingStageId[]) {
+    localStorage.setItem("mlcraft-training-stages", JSON.stringify(next));
+    return next;
+  }
   function togglePhase(phase: number) {
-    setCompletedPhases((current) => {
-      const next = current.includes(phase)
-        ? current.filter((value) => value !== phase)
-        : [...current, phase];
-      localStorage.setItem("mlcraft-training-phases", JSON.stringify(next));
-      return next;
-    });
+    const ids = trainingStages
+      .filter((stage) => stage.phase === phase)
+      .map((stage) => stage.id);
+    setCompletedStages((current) =>
+      saveCompletedStages(
+        ids.every((id) => current.includes(id))
+          ? current.filter((id) => !ids.includes(id))
+          : [...new Set([...current, ...ids])],
+      ),
+    );
+  }
+  function toggleStage(id: TrainingStageId) {
+    setCompletedStages((current) =>
+      saveCompletedStages(
+        current.includes(id)
+          ? current.filter((stage) => stage !== id)
+          : [...current, id],
+      ),
+    );
   }
   const selectedTrainingStage = trainingStages.find(
     (stage) => stage.id === trainingStage,
@@ -843,12 +876,11 @@ export default function Dashboard() {
                     <label className="phase-check">
                       <input
                         type="checkbox"
-                        checked={completedPhases.includes(
-                          selectedTrainingStage?.phase ?? -1,
-                        )}
+                        checked={
+                          !!trainingStage && completedStages.includes(trainingStage)
+                        }
                         onChange={() => {
-                          if (selectedTrainingStage)
-                            togglePhase(selectedTrainingStage.phase);
+                          if (trainingStage) toggleStage(trainingStage);
                         }}
                       />
                       Phase {selectedTrainingStage?.code} ·{" "}
@@ -859,8 +891,21 @@ export default function Dashboard() {
               )}
               {!trainingStage && (
                 <TrainingStages
+                  runs={runs}
+                  online={online}
+                  completedStages={completedStages}
                   completedPhases={completedPhases}
                   onTogglePhase={togglePhase}
+                  onToggleStage={toggleStage}
+                  onViewRun={(id) => {
+                    setSelected(id);
+                    setView("overview");
+                    window.history.replaceState(
+                      null,
+                      "",
+                      `/?view=training&run=${id}`,
+                    );
+                  }}
                   onOpen={(id) => {
                     setTrainingStage(id);
                     setSelected("");
@@ -880,6 +925,14 @@ export default function Dashboard() {
                   act={act}
                   maxAgents={data?.capacity.maxAgents ?? 64}
                 />
+              )}
+              {trainingStage === "phase3d" && (
+                <CombatTraining runs={runs} online={online} act={act}
+                  maxAgents={data?.capacity.maxAgents ?? 64} />
+              )}
+              {trainingStage === "phase3c" && (
+                <InteractionTraining runs={runs} online={online} act={act}
+                  maxAgents={data?.capacity.maxAgents ?? 64} />
               )}
               {trainingStage === "phase0" && (
                 <section className="phase-zero-preview">
@@ -985,7 +1038,8 @@ export default function Dashboard() {
               {trainingStage &&
                 !phaseGoalStage &&
                 trainingStage !== "phase0" &&
-                trainingStage !== "phase3a" && (
+                trainingStage !== "phase3a" &&
+                trainingStage !== "phase3d" && (
                   <PlannedTrainingStage id={trainingStage} />
                 )}
             </>

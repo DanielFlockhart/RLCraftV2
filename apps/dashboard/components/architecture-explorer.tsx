@@ -7,6 +7,7 @@ import type {
   GoalModelSnapshot,
   Metric,
   ModelSnapshot,
+  ModelInspection,
   Run,
 } from "@mlcraft/core";
 import { trainingStages } from "../lib/training-stages";
@@ -84,6 +85,7 @@ export function ArchitectureExplorer({
   const [historyMetrics, setHistoryMetrics] = useState<Metric[]>();
   const [modelError, setModelError] = useState("");
   const [variantIndex, setVariantIndex] = useState(0);
+  const [variantDetail, setVariantDetail] = useState<{ fingerprint: string; inspection: ModelInspection }>();
 
   useEffect(() => {
     if (!online) return;
@@ -116,10 +118,9 @@ export function ArchitectureExplorer({
     (job) => (job.stageId ?? "phase1a") === stageId,
   );
   const selectedJob = jobs.find((job) => job.id === modelId) ?? jobs[0];
-  const motorRuns =
-    stageId === "phase3a"
-      ? runs.filter((run) => run.spec.stage === "motor")
-      : [];
+  const motorRuns = runs.filter((run) =>
+    stageId === "phase3a" ? run.spec.stage === "motor" : stageId === "phase3d" ? run.spec.stage === "pvp" : false,
+  );
   const selectedRun = motorRuns.find((run) => run.id === runId) ?? motorRuns[0];
   const runMetrics = selectedRun
     ? (historyMetrics ??
@@ -129,7 +130,25 @@ export function ArchitectureExplorer({
   const latestTrial = runMetrics
     .filter((metric) => metric.kind === "motor-trial")
     .at(-1)?.motor;
-  const variant = inspection?.variants[variantIndex] ?? inspection?.variants[0];
+  const latestCombatTrial = runMetrics.filter((metric) => metric.kind === "combat-trial").at(-1)?.combat;
+  const latestHeldOut = runMetrics.filter((metric) => metric.kind === "combat-trial" && metric.combat?.heldOut).at(-1)?.combat;
+  const selectedVariant = inspection?.variants[variantIndex] ?? inspection?.variants[0];
+  const variant = selectedVariant && variantDetail?.fingerprint === selectedVariant.fingerprint
+    ? { ...selectedVariant, inspection: variantDetail.inspection }
+    : selectedVariant;
+
+  useEffect(() => {
+    setVariantDetail(undefined);
+    if (!selectedRun || !selectedVariant?.inspection.hyperparameters.detailAvailable) return;
+    const controller = new AbortController();
+    void fetch(`/api/control/models/run/${selectedRun.id}/variant/${selectedVariant.fingerprint}`, { signal: controller.signal, cache: "no-store" })
+      .then((response) => response.ok ? response.json() : undefined)
+      .then((inspection: ModelInspection | undefined) => {
+        if (!controller.signal.aborted && inspection) setVariantDetail({ fingerprint: selectedVariant.fingerprint, inspection });
+      })
+      .catch(() => {});
+    return () => controller.abort();
+  }, [selectedRun?.id, selectedVariant?.fingerprint, selectedVariant?.inspection.hyperparameters.detailAvailable]);
 
   useEffect(() => {
     setConfig(undefined);
@@ -179,8 +198,8 @@ export function ArchitectureExplorer({
   const modelCount = (id: string) =>
     (models?.jobs.filter((job) => (job.stageId ?? "phase1a") === id).length ??
       0) +
-    (id === "phase3a"
-      ? runs.filter((run) => run.spec.stage === "motor").length
+    (id === "phase3a" || id === "phase3d"
+      ? runs.filter((run) => run.spec.stage === (id === "phase3a" ? "motor" : "pvp")).length
       : 0);
 
   return (
@@ -346,7 +365,7 @@ export function ArchitectureExplorer({
                 <div
                   className="arch-record-list"
                   role="group"
-                  aria-label="Motor runs"
+                  aria-label="Training runs"
                 >
                   {motorRuns.map((run) => (
                     <button
@@ -355,7 +374,7 @@ export function ArchitectureExplorer({
                       onClick={() => setRunId(run.id)}
                     >
                       <strong>
-                        {run.spec.motor} · {run.id.slice(0, 8)}
+                        {run.spec.motor ?? run.spec.combat} · {run.id.slice(0, 8)}
                       </strong>
                       <small>
                         {run.status} ·{" "}
@@ -367,7 +386,7 @@ export function ArchitectureExplorer({
                 {selectedRun && (
                   <div className="arch-record-detail">
                     <h4>
-                      {selectedRun.spec.motor} · {selectedRun.status}
+                      {selectedRun.spec.motor ?? selectedRun.spec.combat} · {selectedRun.status}
                     </h4>
                     <p>
                       Trial episode {selectedRun.episode} ·{" "}
@@ -421,6 +440,9 @@ export function ArchitectureExplorer({
                                       2,
                                     )}
                                   </p>
+                                )}
+                                {variant.inspection.hyperparameters.trainingWins !== undefined && (
+                                  <p>Verified training wins: {String(variant.inspection.hyperparameters.trainingWins)}. Selection ranks wins before reward.</p>
                                 )}
                                 {variant.inspection.hyperparameters
                                   .assignment && (
@@ -509,14 +531,17 @@ export function ArchitectureExplorer({
                     detail={`${selectedRun.episode} episodes reached`}
                   />
                   <MetricCard
-                    label="Last trial success"
-                    value={
-                      latestTrial
-                        ? `${latestTrial.successes}/${latestTrial.trials}`
-                        : "No sample"
-                    }
-                    detail="Agents reaching their target"
+                    label={selectedRun.spec.stage === "pvp" ? "Last trial wins" : "Last trial success"}
+                    value={selectedRun.spec.stage === "pvp"
+                      ? latestCombatTrial ? `${latestCombatTrial.wins}/${latestCombatTrial.trials}` : "No sample"
+                      : latestTrial ? `${latestTrial.successes}/${latestTrial.trials}` : "No sample"}
+                    detail={selectedRun.spec.stage === "pvp" ? "Server verified kills and wins" : "Agents reaching their target"}
                   />
+                  {selectedRun.spec.stage === "pvp" && <MetricCard
+                    label="Held-out win rate"
+                    value={latestHeldOut ? pct(latestHeldOut.winRate) : "No sample"}
+                    detail="Third scenario; excluded from fitness"
+                  />}
                 </div>
                 {!latestRunMetric && (
                   <p className="arch-empty">

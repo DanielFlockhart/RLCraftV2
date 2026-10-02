@@ -1,10 +1,14 @@
-import type { Run } from "@mlcraft/core";
+import type { AgentState, Run } from "@mlcraft/core";
 import { effectiveStepMs } from "@mlcraft/core";
 import { arenaSpawn } from "../../../packages/core/src/arenas.js";
 import { motorTarget } from "../../../packages/core/src/motor.js";
 
 /** Viewer-only projection: no Minecraft commands or agent state changes. */
-export function viewerHudRuns(runs: Run[], now = Date.now()) {
+export function viewerHudRuns(
+  runs: Run[],
+  now = Date.now(),
+  agentsForRun: (runId: string) => AgentState[] = () => [],
+) {
   const live = new Set(["running", "paused", "pausing", "queued"]);
   const priority = (r: Run) =>
     ["running", "pausing"].includes(r.status)
@@ -58,7 +62,18 @@ export function viewerHudRuns(runs: Run[], now = Date.now()) {
                 run.spec.agents,
               ),
             }))
-          : [];
+          : run.spec.motorTerrain &&
+              ["running", "paused", "pausing"].includes(run.status)
+            ? agentsForRun(run.id).flatMap((agent) =>
+                agent.motorSpawn && agent.motorTarget
+                  ? [{
+                      index: Number(agent.id.slice(agent.id.lastIndexOf(":") + 1)),
+                      spawn: agent.motorSpawn,
+                      target: agent.motorTarget,
+                    }]
+                  : [],
+              )
+            : [];
       return {
         id: run.id,
         stage: run.spec.stage,

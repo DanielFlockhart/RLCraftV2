@@ -24,6 +24,9 @@ export function selectedEnvironment(
           ) => environment.watchProgress!(listener),
         }
       : {}),
+    ...(environment.executeSkill
+      ? { executeSkill: (request: Parameters<NonNullable<Environment["executeSkill"]>>[0]) => environment.executeSkill!(request) }
+      : {}),
     connect: () => environment.connect(),
     close: () => environment.close(),
     async apply(action) {

@@ -21,6 +21,7 @@ export interface BackendContext {
   inputs: AgentInputConfig;
   render?: import("@mlcraft/core").RenderSettings;
   assetDirectory: string;
+  combatBounds?: { minX: number; maxX: number; minZ: number; maxZ: number };
   managed: {
     applySetup(setup: AgentSetup): Promise<void>;
     moveToArena(): Promise<void>;

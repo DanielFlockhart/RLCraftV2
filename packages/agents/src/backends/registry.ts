@@ -28,7 +28,9 @@ export const backendDescriptorSchema = z
       z.string().refine((id) => channelIds.has(id), "Unknown input channel"),
       z.enum(["native", "approximate", "external", "unsupported"]),
     ),
-    actions: z.array(z.enum(["controls", "look", "dig"])).max(3),
+    actions: z
+      .array(z.enum(["controls", "look", "dig", "attack", "block", "use"]))
+      .max(6),
     lifecycle: z
       .object({
         reset: z.boolean(),
@@ -152,7 +154,7 @@ export class BackendRegistry {
     const entry = this.entries.get(snapshot.descriptor.id);
     if (!entry || entry.revision !== snapshot.revision)
       throw new Error(
-        "Backend configuration changed after this run was queued; create a new run with the current backend",
+        "Backend source changed since the control service started. Restart control, then retry the run with the current backend",
       );
     let environment: Environment;
     if (entry.create) environment = await entry.create(context);
@@ -249,7 +251,7 @@ export async function loadBackendRegistry(
       "audio.pcm": "approximate",
       "audio.capture": "external",
     },
-    actions: ["controls", "look", "dig"],
+    actions: ["controls", "look", "dig", "attack", "block", "use"],
     lifecycle: { reset: true, respawn: true, teleport: true, capture: true },
     limitations: [
       "Version compatibility is checked by the installed Mineflayer library at connection time.",
@@ -272,6 +274,7 @@ export async function loadBackendRegistry(
         context.managed.moveToArena,
         context.inputs,
         context.assetDirectory,
+        context.combatBounds,
       );
     },
     {

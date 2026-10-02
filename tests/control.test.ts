@@ -763,10 +763,114 @@ test("motor sessions require a prepared superflat world and a selected curriculu
   const world = await app.inject({ url: "/phase3a/world", headers });
   assert.equal(world.statusCode, 200);
   assert.equal(world.json().ready, false);
-  assert.equal((await post("/runs", { ...base, stage: "motor" })).statusCode, 400);
-  const session = await post("/phase3a/sessions", { session: "M0", agents: 1, episodes: 1, ticksPerEpisode: 1 });
+  assert.equal(
+    (await post("/runs", { ...base, stage: "motor" })).statusCode,
+    400,
+  );
+  const session = await post("/phase3a/sessions", {
+    session: "M0",
+    agents: 1,
+    episodes: 1,
+    ticksPerEpisode: 1,
+  });
   assert.equal(session.statusCode, 400);
   assert.match(session.json().error, /Prepare the server first/);
+});
+test("combat routes expose the curriculum and reject invalid Full Run conditions", async () => {
+  assert.equal(
+    (await app.inject({ url: "/phase3d/world", headers })).json().ready,
+    false,
+  );
+  const sessions = await app.inject({ url: "/phase3d/sessions", headers });
+  assert.equal(sessions.statusCode, 200);
+  assert.equal(sessions.json().length, 36);
+  assert.equal(
+    (await post("/runs", { ...base, stage: "pvp" })).statusCode,
+    400,
+  );
+  const stages = Array.from({ length: sessions.json().length }, (_, index) => ({
+    session: `C${index}`,
+    agents: 4,
+    episodes: 3,
+    ticksPerEpisode: 120,
+    tickMs: 100,
+    seed: 42,
+  }));
+  assert.equal(
+    (await post("/phase3d/full-runs", { stages: stages.slice(1) })).statusCode,
+    400,
+  );
+  assert.equal(
+    (
+      await post("/phase3d/full-runs", {
+        stages: stages.map((stage, index) =>
+          index === 4 ? { ...stage, agents: 3 } : stage,
+        ),
+      })
+    ).statusCode,
+    400,
+  );
+  assert.deepEqual(
+    (await app.inject({ url: "/phase3d/full-runs", headers })).json(),
+    [],
+  );
+  const oldPlan = {
+    id: "00000000-0000-4000-8000-000000000122",
+    status: "paused" as const,
+    stageIndex: 11,
+    stages: stages
+      .slice(0, 12)
+      .map((stage) => ({
+        ...stage,
+        session: stage.session as import("@mlcraft/core").CombatSession,
+        runIds: [],
+      })),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  store.saveCombatFullRun(oldPlan);
+  const extension = await post(`/phase3d/full-runs/${oldPlan.id}/extend`, {
+    stages: stages.slice(12),
+  });
+  assert.equal(extension.statusCode, 200);
+  assert.equal(extension.json().stages.length, sessions.json().length);
+  assert.equal(extension.json().status, "paused");
+  assert.equal(extension.json().stages[12].minWinRate, undefined);
+  assert.equal(
+    (await post(`/phase3d/full-runs/${oldPlan.id}/cancel`, {})).statusCode,
+    200,
+  );
+});
+test("Phase 3C exposes executable targeting and mining sessions", async () => {
+  const sessions = await app.inject({ url: "/phase3c/sessions", headers });
+  assert.equal(sessions.statusCode, 200);
+  assert.deepEqual(sessions.json().map((session: { id: string }) => session.id), [
+    "A0", "A1", "A2", "M0", "M1", "M2", "M3", "M4", "M5",
+  ]);
+  assert.equal((await post("/phase3c/sessions", { session: "P0" })).statusCode, 400);
+  assert.equal((await post("/runs", { ...base, stage: "interaction", interaction: "M0" })).statusCode, 400);
+  const affordance = await post("/phase3c/affordances", {
+    request: { skill: "CRAFT", target: { recipe: "iron_pickaxe" } },
+    state: { inventory: { iron_ingot: 1, stick: 2 }, workstations: ["crafting_table"] },
+  });
+  assert.equal(affordance.statusCode, 200);
+  assert.deepEqual(affordance.json(), {
+    executable: false, reason: "MISSING_INGREDIENT", missing: [{ item: "iron_ingot", count: 2 }],
+  });
+});
+
+test("combat continuation explains a missing population checkpoint", async () => {
+  const id = "00000000-0000-4000-8000-000000000123";
+  const now = new Date().toISOString();
+  store.saveRun({
+    id,
+    spec: { ...base, stage: "pvp", combat: "C0", mode: "minecraft", component: "pipeline" },
+    status: "failed", episode: 0, progress: 0, createdAt: now, updatedAt: now,
+  });
+  const response = await post("/phase3d/resume", { runId: id, additionalEpisodes: 8 });
+  assert.equal(response.statusCode, 400);
+  assert.match(response.body, /no population checkpoint/i);
+  assert.doesNotMatch(response.body, /ENOENT/);
 });
 test("Full Run rejects incomplete and unsafe stage sequences before launching", async () => {
   const stages = Array.from({ length: 9 }, (_, index) => ({
@@ -780,11 +884,31 @@ test("Full Run rejects incomplete and unsafe stage sequences before launching", 
     minSuccessRate: 0,
     maxAttempts: 1,
   }));
-  assert.equal((await post("/phase3a/full-runs", { stages: stages.slice(0, 8) })).statusCode, 400);
-  assert.equal((await post("/phase3a/full-runs", { stages: stages.map((stage, index) =>
-    index === 8 ? { ...stage, seed: stages[7].seed } : stage) })).statusCode, 400);
-  assert.equal((await post("/phase3a/full-runs", { stages: stages.map((stage, index) =>
-    index === 0 ? { ...stage, episodes: 1 } : stage) })).statusCode, 400);
+  assert.equal(
+    (await post("/phase3a/full-runs", { stages: stages.slice(0, 8) }))
+      .statusCode,
+    400,
+  );
+  assert.equal(
+    (
+      await post("/phase3a/full-runs", {
+        stages: stages.map((stage, index) =>
+          index === 8 ? { ...stage, seed: stages[7].seed } : stage,
+        ),
+      })
+    ).statusCode,
+    400,
+  );
+  assert.equal(
+    (
+      await post("/phase3a/full-runs", {
+        stages: stages.map((stage, index) =>
+          index === 0 ? { ...stage, episodes: 1 } : stage,
+        ),
+      })
+    ).statusCode,
+    400,
+  );
   const plans = await app.inject({ url: "/phase3a/full-runs", headers });
   assert.equal(plans.statusCode, 200);
   assert.deepEqual(plans.json(), []);

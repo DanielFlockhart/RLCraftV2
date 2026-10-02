@@ -216,10 +216,13 @@ final class ViewerHud implements Listener {
         if (dx * dx + dy * dy + dz * dz > 96 * 96) return;
         for (int i = 0; i < 8; i++) {
             double angle = i * Math.PI / 4;
-            player.spawnParticle(Particle.REDSTONE, x + Math.cos(angle) * 0.7, y + 0.2, z + Math.sin(angle) * 0.7, 1, 0, 0, 0, 0, dust);
+            player.spawnParticle(Particle.REDSTONE, x + Math.cos(angle) * 0.7, y + 0.06, z + Math.sin(angle) * 0.7, 1, 0, 0, 0, 0, dust);
         }
-        if (beacon) for (int i = 0; i < 5; i++)
-            player.spawnParticle(Particle.REDSTONE, x, y + 0.4 + i * 0.45, z, 1, 0, 0, 0, 0, dust);
+        if (beacon) {
+            player.spawnParticle(Particle.REDSTONE, x, y + 0.06, z, 1, 0, 0, 0, 0, dust);
+            for (int i = 0; i < 3; i++)
+                player.spawnParticle(Particle.REDSTONE, x, y + 0.18 + i * 0.18, z, 1, 0, 0, 0, dust);
+        }
     }
 
     private static String string(Map<?, ?> row, String key) {

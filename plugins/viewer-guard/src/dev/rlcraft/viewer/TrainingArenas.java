@@ -12,6 +12,7 @@ import org.bukkit.entity.*;
 import org.bukkit.event.*;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
+import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
@@ -23,7 +24,8 @@ final class TrainingArenas implements Listener {
     private final Map<String, Job> jobs = new HashMap<>();
     private final Map<String, Plan> ready = new HashMap<>();
     private final Map<String, Integer> tickets = new HashMap<>();
-    private static final Set<String> MOB_TYPES = Set.of("cow", "pig", "sheep", "chicken", "zombie", "skeleton", "spider");
+    private final Map<UUID, String> trackedMobs = new HashMap<>();
+    private static final Set<String> MOB_TYPES = Set.of("cow", "pig", "sheep", "chicken", "rabbit", "wolf", "zombie", "skeleton", "spider", "husk", "drowned", "stray", "cave_spider", "creeper", "witch", "pillager", "vindicator", "ravager", "slime", "magma_cube", "blaze", "wither_skeleton", "zombified_piglin", "zoglin", "polar_bear", "llama");
     TrainingArenas(JavaPlugin plugin, Predicate<Player> viewer) {
         this.plugin = plugin; this.viewer = viewer;
         Bukkit.getPluginManager().registerEvents(this, plugin);
@@ -49,6 +51,7 @@ final class TrainingArenas implements Listener {
     private final class Plan {
         final String run; final World world; final int agents, width, height, depth; final Material floor, walls, roof;
         final Point spawn; final List<Point> cells = new ArrayList<>();
+        final List<Set<UUID>> mobIds = new ArrayList<>(); final int[] kills;
         final List<Region> regions = new ArrayList<>(); final List<Stock> stocks = new ArrayList<>(); final List<Mob> mobs = new ArrayList<>();
         Plan(String run, YamlConfiguration payload) {
             this.run = run;
@@ -105,7 +108,9 @@ final class TrainingArenas implements Listener {
                 Point cell = new Point(x + (i%columns)*(width+2+gap), y, z + (i/columns)*(depth+2+gap));
                 if (Math.abs((long)cell.x+width+1) > 29999984 || Math.abs((long)cell.z+depth+1) > 29999984 || cell.y+height+1 >= world.getMaxHeight()) throw new IllegalArgumentException("Layout outside world bounds");
                 cells.add(cell);
+                mobIds.add(new HashSet<>());
             }
+            kills = new int[count];
         }
         void check(Point p) { if (p.x >= width || p.y >= height || p.z >= depth) throw new IllegalArgumentException("Contents outside cell"); }
         Material at(Point p) {
@@ -119,6 +124,11 @@ final class TrainingArenas implements Listener {
             Point p = new Point(location.getBlockX(), location.getBlockY(), location.getBlockZ());
             for (Point c : cells) if (within(p, c, new Point(c.x+width+1, c.y+height+1, c.z+depth+1))) return true;
             return false;
+        }
+        boolean containsCell(int index, Location location) {
+            if (location.getWorld() != world || index < 0 || index >= cells.size()) return false;
+            Point c = cells.get(index), p = new Point(location.getBlockX(), location.getBlockY(), location.getBlockZ());
+            return within(p, c, new Point(c.x+width+1, c.y+height+1, c.z+depth+1));
         }
         boolean owned(Player player) {
             String prefix = "rl_"+run.substring(0,6)+"_";
@@ -163,7 +173,35 @@ final class TrainingArenas implements Listener {
         } catch (Exception error) { result(args[0], String.valueOf(error.getMessage())); }
         return true;
     }
-    void cancel(String run) { Job job = jobs.get(run); if (job != null) job.finish("Arena operation cancelled"); ready.remove(run); }
+    boolean status(CommandSender sender, String[] args) {
+        if (!(sender instanceof ConsoleCommandSender)) return true;
+        if (args.length != 2 || !args[0].matches("[a-f0-9-]{36}") || !args[1].matches("[a-f0-9-]{36}")) return false;
+        Plan plan = ready.get(args[1]);
+        if (plan == null) { plugin.getLogger().warning("RLCRAFT_ARENA_STATUS_ERROR " + args[0] + " Arena not ready"); return true; }
+        StringJoiner rows = new StringJoiner(";");
+        for (int i=0; i<plan.cells.size(); i++) {
+            int alive=0;
+            for (UUID id : plan.mobIds.get(i)) {
+                Entity entity = Bukkit.getEntity(id);
+                if (entity != null && entity.isValid() && !entity.isDead()) alive++;
+            }
+            rows.add(alive + "," + plan.kills[i]);
+        }
+        plugin.getLogger().info("RLCRAFT_ARENA_STATUS_OK " + args[0] + " " + rows);
+        return true;
+    }
+    @EventHandler(priority=EventPriority.MONITOR, ignoreCancelled=true)
+    public void onMobDeath(EntityDeathEvent event) {
+        String run = trackedMobs.remove(event.getEntity().getUniqueId());
+        if (run == null) return;
+        Plan plan = ready.get(run);
+        if (plan == null) return;
+        Player killer = event.getEntity().getKiller();
+        if (killer == null || !plan.owned(killer)) return;
+        int index = Integer.parseInt(killer.getName().substring(killer.getName().lastIndexOf('_')+1));
+        if (index < plan.cells.size() && plan.containsCell(index, event.getEntity().getLocation())) plan.kills[index]++;
+    }
+    void cancel(String run) { Job job = jobs.get(run); if (job != null) job.finish("Arena operation cancelled"); ready.remove(run); trackedMobs.entrySet().removeIf(entry -> entry.getValue().equals(run)); }
     void close() { for (String run : new ArrayList<>(jobs.keySet())) cancel(run); ready.clear(); }
     @EventHandler(priority=EventPriority.HIGHEST, ignoreCancelled=true)
     public void freeze(PlayerMoveEvent event) {
@@ -200,6 +238,7 @@ final class TrainingArenas implements Listener {
                         plan.world.getBlockAt(location.clone().add(0,-1,0)).setType(plan.spawn.y==0 ? plan.floor : plan.at(new Point(plan.spawn.x,plan.spawn.y-1,plan.spawn.z)), false);
                         if (!player.teleport(location)) throw new IllegalArgumentException("Agent holding teleport rejected");
                     }
+                    trackedMobs.entrySet().removeIf(entry -> entry.getValue().equals(plan.run));
                     for (Entity entity : plan.world.getEntities()) if (!(entity instanceof Player) && plan.contains(entity.getLocation())) entity.remove();
                     task=Bukkit.getScheduler().runTaskTimer(plugin, this::step, 1L, 1L);
                 } catch (Exception error) { finish(String.valueOf(error.getMessage())); }
@@ -222,18 +261,22 @@ final class TrainingArenas implements Listener {
             try {
                 plan.checkPlayers();
                 int volume=(plan.width+2)*(plan.depth+2)*(plan.height+2), total=volume*plan.cells.size();
-                for (int n=0; n<512 && cursor<total; n++,cursor++) {
+                int changed=0;
+                for (int visited=0; visited<4096 && changed<512 && cursor<total; visited++,cursor++) {
                     Point c=plan.cells.get(cursor/volume); int offset=cursor%volume;
                     int x=offset%(plan.width+2), z=(offset/(plan.width+2))%(plan.depth+2), y=offset/((plan.width+2)*(plan.depth+2));
                     Material block = y==0 ? plan.floor : y==plan.height+1 ? plan.roof : x==0 || x==plan.width+1 || z==0 || z==plan.depth+1 ? plan.walls : plan.at(new Point(x-1,y-1,z-1));
                     org.bukkit.block.Block target = plan.world.getBlockAt(c.x+x,c.y+y,c.z+z);
-                    target.setType(block,false);
+                    if (target.getType() != block) { target.setType(block,false); changed++; }
                     if (target.getState() instanceof Container) {
                         Container empty = (Container)target.getState(); empty.getSnapshotInventory().clear(); empty.update(true,false);
                     }
                 }
                 if (cursor == total) {
-                    for (Point c : plan.cells) {
+                    // Barrier roofs admit skylight; keep daylight-sensitive opponents alive.
+                    if (!plan.mobs.isEmpty()) plan.world.setTime(18000L);
+                    for (int cellIndex=0; cellIndex<plan.cells.size(); cellIndex++) {
+                        Point c=plan.cells.get(cellIndex);
                         for (Stock stock : plan.stocks) {
                             Container container=(Container)plan.world.getBlockAt(plan.position(c,stock.position)).getState();
                             container.getSnapshotInventory().clear();
@@ -243,6 +286,8 @@ final class TrainingArenas implements Listener {
                         for (Mob mob : plan.mobs) for (int i=0;i<mob.count;i++) {
                             Entity entity=plan.world.spawnEntity(plan.position(c,mob.position),mob.type);
                             entity.addScoreboardTag("rlcraft.arena."+plan.run);
+                            plan.mobIds.get(cellIndex).add(entity.getUniqueId());
+                            trackedMobs.put(entity.getUniqueId(), plan.run);
                         }
                     }
                     ready.put(plan.run,plan); finish(null);

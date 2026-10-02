@@ -4,7 +4,7 @@ import type {
   MotorSession,
   Observation,
 } from "./index.js";
-import { arenaSpawn } from "./arenas.ts";
+import { arenaCellOrigin, arenaSpawn } from "./arenas.ts";
 export { motorSessions } from "./motor-sessions.ts";
 
 export const MOTOR_TRIALS_PER_EVOLUTION = 3;
@@ -111,24 +111,61 @@ export function motorTarget(
   const distanceVariation = [-2, 0, 2][
     (trial.scenario + Math.floor(random(seed)() * 3)) % 3
   ];
+  const desiredX =
+    spawn.x +
+    (session === "M0" ? 12 : session === "M3" ? 19 : 24) +
+    distanceVariation;
+  const origin = arenaCellOrigin(arena, index);
+  const localZ = Math.floor(spawn.z - origin.z - 1);
+  const clear = (x: number) => {
+    const localX = Math.floor(x - origin.x - 1);
+    return localX >= 1 && localX < arena.blueprint.width - 1 &&
+      !arena.blueprint.regions.some((region) =>
+        region.block !== "minecraft:air" &&
+        region.block !== "minecraft:water" &&
+        region.from.x <= localX && region.to.x >= localX &&
+        region.from.z <= localZ && region.to.z >= localZ &&
+        region.from.y <= 1 && region.to.y >= 0,
+      );
+  };
+  for (let offset = 0; offset < arena.blueprint.width; offset++) {
+    for (const x of offset ? [desiredX - offset, desiredX + offset] : [desiredX])
+      if (clear(x)) return { x, y: spawn.y, z: spawn.z };
+  }
+  throw new Error("Motor arena has no clear target near the requested distance");
+}
+
+export function motorNaturalTarget(
+  position: ArenaPoint,
+  seed: number,
+  worldSeed: string,
+  episode: number,
+  index: number,
+  minDistance: number,
+  maxDistance: number,
+): ArenaPoint {
+  let state = (seed ^ episode ^ Math.imul(index + 1, 0x9e3779b9)) >>> 0;
+  for (const character of worldSeed)
+    state = (Math.imul(state, 31) + character.charCodeAt(0)) >>> 0;
+  const next = random(state);
+  const angle = next() * Math.PI * 2;
+  const distance = minDistance + next() * (maxDistance - minDistance);
   return {
-    x:
-      spawn.x +
-      (session === "M0" ? 12 : session === "M3" ? 19 : 24) +
-      distanceVariation,
-    y: spawn.y,
-    z: spawn.z,
+    x: position.x + Math.cos(angle) * distance,
+    y: position.y,
+    z: position.z + Math.sin(angle) * distance,
   };
 }
 
 export function motorReachedTarget(
   observation: Observation,
   target: ArenaPoint,
+  horizontal = false,
 ) {
   return (
     Math.hypot(
       target.x - observation.position.x,
-      target.y - observation.position.y,
+      horizontal ? 0 : target.y - observation.position.y,
       target.z - observation.position.z,
     ) <= MOTOR_TARGET_RADIUS
   );
@@ -147,11 +184,12 @@ export function motorReward(
   after: Observation,
   target: ArenaPoint,
   alreadyReached = false,
+  horizontal = false,
 ) {
   const distance = (observation: Observation) =>
     Math.hypot(
       target.x - observation.position.x,
-      target.y - observation.position.y,
+      horizontal ? 0 : target.y - observation.position.y,
       target.z - observation.position.z,
     );
   const previous = distance(before),

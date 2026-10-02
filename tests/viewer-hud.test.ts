@@ -141,3 +141,29 @@ test("64 motor markers fit in the viewer HUD console payload", () => {
     `HUD payload has ${payload.length} characters`,
   );
 });
+
+test("natural terrain markers use each agent's observed spawn and target", () => {
+  const terrainRun: Run = {
+    ...run,
+    spec: {
+      ...run.spec,
+      stage: "motor",
+      motor: "M7",
+      motorTerrain: {
+        planId: "00000000-0000-4000-8000-000000000001",
+        worldSeed: "12345",
+        minDistance: 12,
+        maxDistance: 80,
+        spreadRadius: 128,
+      },
+    },
+  };
+  const spawn = { x: 10, y: 71, z: 20 };
+  const target = { x: 60, y: 71, z: 40 };
+  const projected = viewerHudRuns([terrainRun], 4000, () => [{
+    id: `${terrainRun.id}:0`, runId: terrainRun.id, username: "rl_test_0",
+    status: "active", ticks: 0, reward: 0, health: 20,
+    motorSpawn: spawn, motorTarget: target,
+  }]);
+  assert.deepEqual(projected[0].motorMarkers, [{ index: 0, spawn, target }]);
+});

@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { Play, Square } from "lucide-react";
-import type { MotorFullRun, Run } from "@mlcraft/core";
+import type { MotorFullRun, MotorTerrainRun, Run } from "@mlcraft/core";
 import { motorSessions } from "../../../packages/core/src/motor-sessions";
 import { motorArena, motorTrialPlan } from "../../../packages/core/src/motor";
 import {
@@ -39,6 +39,13 @@ export function MotorTraining({
   const [renderLimit, setRenderLimit] = useState(2);
   const [fullRuns, setFullRuns] = useState<MotorFullRun[]>([]);
   const [fullRunAvailable, setFullRunAvailable] = useState(false);
+  const [terrainRuns, setTerrainRuns] = useState<MotorTerrainRun[]>([]);
+  const [terrainAvailable, setTerrainAvailable] = useState(false);
+  const [terrainSourceId, setTerrainSourceId] = useState("");
+  const [episodesPerWorld, setEpisodesPerWorld] = useState(12);
+  const [minDistance, setMinDistance] = useState(12);
+  const [maxDistance, setMaxDistance] = useState(80);
+  const [spreadRadius, setSpreadRadius] = useState(128);
   const [resumeRunId, setResumeRunId] = useState("");
   const [additionalEpisodes, setAdditionalEpisodes] = useState(64);
   useEffect(() => {
@@ -66,6 +73,12 @@ export function MotorTraining({
         });
         setFullRunAvailable(plans.ok);
         if (plans.ok) setFullRuns(await plans.json());
+        const terrain = await fetch("/api/control/phase3a/terrain-runs", {
+          signal: controller.signal,
+          cache: "no-store",
+        });
+        setTerrainAvailable(terrain.ok);
+        if (terrain.ok) setTerrainRuns(await terrain.json());
       } catch {}
       if (!controller.signal.aborted) timer = setTimeout(poll, 3000);
     }
@@ -81,6 +94,11 @@ export function MotorTraining({
       ["running", "queued", "paused", "pausing"].includes(run.status),
   );
   const fullRunActive = fullRuns.some((plan) => ["running", "paused"].includes(plan.status));
+  const activeTerrain = terrainRuns.find((plan) => plan.status === "running");
+  const resumableTerrain = terrainRuns.find((plan) => ["stopped", "failed"].includes(plan.status));
+  const completedFullRuns = fullRuns.filter((plan) => plan.status === "completed");
+  const selectedTerrainSource = completedFullRuns.find((plan) => plan.id === terrainSourceId)
+    ?? completedFullRuns[0];
   const resumableRuns = runs.filter((run) =>
     run.spec.stage === "motor" && run.spec.component === "pipeline" &&
     ["completed", "interrupted", "failed", "cancelled"].includes(run.status),
@@ -124,7 +142,7 @@ export function MotorTraining({
         <div className="input-actions">
           <button
             type="button"
-            disabled={!online || busy || !!current.length || world?.ready}
+            disabled={!online || busy || !!current.length || !!activeTerrain || world?.ready}
             onClick={async () => {
               setBusy(true);
               try {
@@ -137,7 +155,9 @@ export function MotorTraining({
             Prepare motor superflat world
           </button>
           <span role="status">
-            {world?.ready
+            {activeTerrain
+              ? "Generated survival world active"
+              : world?.ready
               ? "Motor superflat world ready"
               : (world?.reason ?? "Checking world…")}
           </span>
@@ -255,6 +275,95 @@ export function MotorTraining({
         defaults={{ agents, episodes, ticksPerEpisode, tickMs, seed, backend }}
       />
       <div className="panel">
+        <h3>Continue in generated survival worlds</h3>
+        <p>
+          Load the complete M7 population from a completed Full Run and keep
+          evolving it. Agents train on normal Minecraft terrain, with new random
+          world seeds after each group of trials. Spawn locations and target
+          distances vary across the world. M8 remains the frozen evaluation.
+        </p>
+        <div className="input-limit-grid">
+          <label>
+            Completed Full Run
+            <select value={selectedTerrainSource?.id ?? ""}
+              onChange={(event) => setTerrainSourceId(event.target.value)}>
+              {!completedFullRuns.length && <option value="">No completed Full Runs</option>}
+              {completedFullRuns.map((plan) => (
+                <option key={plan.id} value={plan.id}>
+                  {plan.id.slice(0, 8)} · M7 population {plan.stages[7]?.runIds.at(-1)?.slice(0, 8)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>Trials per world
+            <input type="number" min={3} max={300} step={3} value={episodesPerWorld}
+              onChange={(event) => setEpisodesPerWorld(Number(event.target.value))} />
+          </label>
+          <label>Minimum target distance (blocks)
+            <input type="number" min={4} max={256} value={minDistance}
+              onChange={(event) => setMinDistance(Number(event.target.value))} />
+          </label>
+          <label>Maximum target distance (blocks)
+            <input type="number" min={4} max={256} value={maxDistance}
+              onChange={(event) => setMaxDistance(Number(event.target.value))} />
+          </label>
+          <label>Spawn spread radius (blocks)
+            <input type="number" min={32} max={2048} value={spreadRadius}
+              onChange={(event) => setSpreadRadius(Number(event.target.value))} />
+          </label>
+        </div>
+        <p>Each trial allows at least 300 steps. The spawn radius varies by world.
+          Normal terrain may include hills, water, forests and other obstacles.
+          Targets are measured horizontally.</p>
+        {activeTerrain ? (
+          <div className="input-actions">
+            <span role="status">
+              Training across worlds · {activeTerrain.runIds.length} world{activeTerrain.runIds.length === 1 ? "" : "s"}
+              {activeTerrain.runIds.at(-1) ? ` · run ${activeTerrain.runIds.at(-1)!.slice(0, 8)}` : " · preparing first world"}
+            </span>
+            <button type="button" disabled={busy} onClick={async () => {
+              setBusy(true);
+              try {
+                const result = await act(`phase3a/terrain-runs/${activeTerrain.id}/stop`, {}) as MotorTerrainRun;
+                setTerrainRuns((current) => current.map((plan) => plan.id === result.id ? result : plan));
+              } finally { setBusy(false); }
+            }}><Square size={14} /> Stop natural training</button>
+          </div>
+        ) : (
+          <button type="button" disabled={!online || !terrainAvailable || busy || fullRunActive ||
+            !!current.length || !selectedTerrainSource || !Number.isInteger(episodesPerWorld) ||
+            episodesPerWorld < 3 || episodesPerWorld > 300 || episodesPerWorld % 3 !== 0 ||
+            !Number.isInteger(minDistance) || minDistance < 4 || minDistance > maxDistance ||
+            !Number.isInteger(maxDistance) || maxDistance > 256 ||
+            !Number.isInteger(spreadRadius) || spreadRadius < 32 || spreadRadius > 2048}
+            onClick={async () => {
+              if (!selectedTerrainSource) return;
+              setBusy(true);
+              try {
+                const result = await act("phase3a/terrain-runs", {
+                  fullRunId: selectedTerrainSource.id, episodesPerWorld,
+                  minDistance, maxDistance, spreadRadius,
+                }) as MotorTerrainRun;
+                setTerrainRuns((current) => [result, ...current]);
+              } finally { setBusy(false); }
+            }}><Play size={14} /> Keep training from Full Run</button>
+        )}
+        {terrainRuns.find((plan) => plan.status === "failed")?.error &&
+          <p role="status">Natural training stopped: {terrainRuns.find((plan) => plan.status === "failed")?.error}</p>}
+        {!activeTerrain && resumableTerrain && (
+          <button type="button" disabled={!online || !terrainAvailable || busy ||
+            fullRunActive || !!current.length}
+            onClick={async () => {
+              setBusy(true);
+              try {
+                const result = await act(`phase3a/terrain-runs/${resumableTerrain.id}/resume`, {}) as MotorTerrainRun;
+                setTerrainRuns((current) => current.map((plan) => plan.id === result.id ? result : plan));
+              } finally { setBusy(false); }
+            }}><Play size={14} /> Resume saved natural training</button>
+        )}
+        {online && !terrainAvailable && <p role="status">Restart the control service to enable natural terrain training.</p>}
+      </div>
+      <div className="panel">
         <h3>Continue a previous population</h3>
         <p>
           Restore the saved genomes, species, unfinished trial scores and NEAT
@@ -331,9 +440,11 @@ export function MotorTraining({
                 <button
                   type="button"
                   disabled={busy}
-                  onClick={() => act(`runs/${active.id}/cancel`, {})}
+                  onClick={() => activeTerrain && active.spec.motorTerrain?.planId === activeTerrain.id
+                    ? act(`phase3a/terrain-runs/${activeTerrain.id}/stop`, {})
+                    : act(`runs/${active.id}/cancel`, {})}
                 >
-                  <Square size={14} /> Stop session
+                  <Square size={14} /> {active.spec.motorTerrain ? "Stop natural training" : "Stop session"}
                 </button>
               ) : (
                 <button

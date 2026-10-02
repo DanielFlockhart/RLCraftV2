@@ -24,6 +24,14 @@ commands:
     description: Spawn an owned agent inside its prepared arena from the console.
     usage: /rlcraftarenaspawn <request-id> <run-id> <agent> <index>
     permission: rlcraft.agent.setup
+  rlcraftarenastatus:
+    description: Report authoritative per-cell combat opponents and agent kills.
+    usage: /rlcraftarenastatus <request-id> <run-id>
+    permission: rlcraft.agent.setup
+  rlcraftsurface:
+    description: Resolve a natural terrain target to standable ground.
+    usage: /rlcraftsurface <request-id> <agent> <x> <z>
+    permission: rlcraft.agent.setup
   rlcraftsetup:
     description: Apply an acknowledged setup to a named training agent from the console.
     usage: /rlcraftsetup <request-id> <agent> <encoded-setup>
